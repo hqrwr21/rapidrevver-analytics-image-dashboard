@@ -1,5 +1,6 @@
 "use client";
 
+import { logout } from './actions/auth'; // <--- ADD THIS LINE
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   UploadCloud, Database, Activity, TrendingUp, Search, 
@@ -7,6 +8,8 @@ import {
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
   Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X
 } from 'lucide-react';
+
+// ... rest of your code
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
