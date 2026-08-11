@@ -76,12 +76,11 @@ export async function deleteFileFromB2(fileName: string, folder: string) {
 export async function getPresignedDownloadUrl(fileName: string, folder: string) {
   const { client, bucket } = getS3Target(folder);
   const command = new GetObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}` });
-  // URL expires in 1 hour
   return getSignedUrl(client, command, { expiresIn: 3600 });
 }
 
 // ==========================================
-// 🔗 GET PUBLIC IMAGE URL
+// 🔗 GET PUBLIC IMAGE URL (Fixed for Spaces)
 // ==========================================
 export async function getPublicB2Url(fileName: string, folder: string) {
   const { bucket } = getS3Target(folder);
@@ -89,6 +88,10 @@ export async function getPublicB2Url(fileName: string, folder: string) {
     ? process.env.B2_IMAGE_ENDPOINT 
     : process.env.B2_DATA_ENDPOINT;
   
-  // Generates the permanent public S3 URL format
-  return `${endpoint}/${bucket}/${folder}${fileName}`;
+  // Combine folder and filename, then encode each segment individually
+  // This properly formats spaces as %20 and safely handles special characters
+  const fullPath = `${folder}${fileName}`;
+  const safePath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  
+  return `${endpoint}/${bucket}/${safePath}`;
 }
