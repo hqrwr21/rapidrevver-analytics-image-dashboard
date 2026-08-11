@@ -1,11 +1,11 @@
 "use client";
 
-import { logout } from './actions/auth';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   UploadCloud, Database, Activity, TrendingUp, Search, 
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
-  CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link
+  CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
+  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -180,8 +180,12 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 // ==========================================
 // 3. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-white border border-slate-200 rounded-xl shadow-sm ${className}`}>{children}</div>;
+function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
+  return (
+    <div onClick={onClick} className={`bg-white border border-slate-200 rounded-xl shadow-sm ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 function Button({ children, onClick, variant = 'primary', className = '', disabled = false }: any) {
@@ -1014,34 +1018,125 @@ function GlobalDeltaView() {
 // --- TAB 6: IMAGE VAULT ---
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
+  const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [copied, setCopied] = useState('');
+  const [copiedAll, setCopiedAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const images = useB2Files('images/', refresh);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Album Management State
+  const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
+  const [localAlbums, setLocalAlbums] = useState<string[]>([]);
+  const [newAlbumName, setNewAlbumName] = useState('');
+
+  // Batch Upload & Success Modal State
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
+
+  // Parse existing files into albums
+  const albumData = useMemo(() => {
+    const data: Record<string, string[]> = {};
+    images.forEach(imgPath => {
+      const parts = imgPath.split('/');
+      if (parts.length > 1) {
+        const album = parts[0];
+        const file = parts.slice(1).join('/');
+        if (!data[album]) data[album] = [];
+        if (file) data[album].push(file);
+      } else {
+        const album = 'Uncategorized';
+        if (!data[album]) data[album] = [];
+        if (imgPath) data[album].push(imgPath);
+      }
+    });
+
+    localAlbums.forEach(la => {
+      if (!data[la]) data[la] = [];
+    });
+
+    return data;
+  }, [images, localAlbums]);
+
+  const albums = Object.keys(albumData).sort();
+
+  const handleCreateAlbum = () => {
+    if (!newAlbumName.trim()) return;
+    const name = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
+    if (!localAlbums.includes(name) && !albums.includes(name)) {
+      setLocalAlbums([...localAlbums, name]);
+    }
+    setNewAlbumName('');
+  };
+
+  const handleDeleteAlbum = async (albumName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); 
+    
+    const imagesInAlbum = albumData[albumName] || [];
+    
+    if (imagesInAlbum.length > 0) {
+      const confirmDelete = window.confirm(`Are you sure you want to delete the album "${albumName}" AND all ${imagesInAlbum.length} images inside it? This cannot be undone.`);
+      if (!confirmDelete) return;
+
+      setIsDeletingAlbum(true);
+      const folderPrefix = `images/${albumName}/`;
+      
+      for (const img of imagesInAlbum) {
+        await deleteFileFromB2(img, folderPrefix);
+      }
+      setIsDeletingAlbum(false);
+    } else {
+      const confirmDelete = window.confirm(`Remove empty album "${albumName}"?`);
+      if (!confirmDelete) return;
+    }
+
+    setLocalAlbums(prev => prev.filter(a => a !== albumName));
+    if (activeAlbum === albumName) setActiveAlbum(null);
+    setRefresh(r => r + 1);
+  };
+
+  const handleQueueFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    setPendingFiles(prev => [...prev, ...files]);
+  };
+
+  const handleBatchUpload = async () => {
+    if (pendingFiles.length === 0 || !activeAlbum) return;
     setUploading(true);
 
-    for(const file of files) {
+    const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+    const successfulUploads: {name: string, url: string}[] = [];
+
+    for (const file of pendingFiles) {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("folder", "images/");
+      formData.append("folder", folderPrefix);
       
       try {
         await uploadFileToB2(formData);
+        // Grab the public URL immediately after successful upload
+        const url = await getPublicB2Url(file.name, folderPrefix);
+        successfulUploads.push({ name: file.name, url });
       } catch (err) {
-        console.error(err);
+        console.error("Batch upload failed for", file.name, err);
       }
     }
+
+    setPendingFiles([]);
     setUploading(false);
-    setRefresh(r=>r+1);
+    setRefresh(r => r + 1);
+    
+    // Trigger the success modal if files were uploaded
+    if (successfulUploads.length > 0) {
+      setUploadedBatchLinks(successfulUploads);
+    }
   };
 
-  const handleCopyLink = async (imgName: string) => {
+  const handleCopyLink = async (imgName: string, album: string) => {
     try {
-      const url = await getPublicB2Url(imgName, 'images/');
+      const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+      const url = await getPublicB2Url(imgName, folderPrefix);
       await navigator.clipboard.writeText(url);
       setCopied(imgName);
       setTimeout(() => setCopied(''), 2000);
@@ -1050,47 +1145,269 @@ function ImageVault() {
     }
   };
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
-        <p className="text-slate-500 mt-1">Upload product images directly to your B2 bucket.</p>
-      </div>
-      <Card className="p-8 text-center">
-        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-          <UploadCloud className="w-10 h-10 text-blue-500 mb-3" />
-          <h3 className="text-lg font-semibold text-slate-800">Upload Product Photos</h3>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleUpload}/>
+  const handleCopyAllLinks = async (album: string) => {
+    try {
+      const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+      const imagesToCopy = albumData[album] || [];
+      
+      const urls = await Promise.all(
+        imagesToCopy.map(imgName => getPublicB2Url(imgName, folderPrefix))
+      );
+      
+      await navigator.clipboard.writeText(urls.join('\n'));
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy all links", err);
+    }
+  };
+
+  const handleDeleteImage = async (imgName: string, album: string) => {
+    const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+    await deleteFileFromB2(imgName, folderPrefix);
+    setRefresh(r => r + 1);
+  };
+
+  // View 1: ALbum List
+  if (!activeAlbum) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500 relative">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+          <p className="text-slate-500 mt-1">Organize and batch upload product images into albums.</p>
         </div>
-        {uploading && <p className="text-sm text-blue-600 mt-4 animate-pulse">Uploading images directly to Backblaze...</p>}
-      </Card>
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4">Browse Uploaded Images</h3>
-        {images.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {images.map(imgName => (
-              <div key={imgName} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col">
-                <div className="h-48 bg-slate-100 flex items-center justify-center p-2">
-                  <img 
-                    src={`/api/b2?folder=images/&file=${encodeURIComponent(imgName)}`} 
-                    alt={imgName} 
-                    className="max-h-full max-w-full object-contain" 
-                  />
-                </div>
-                <div className="p-3 bg-white flex justify-between items-center gap-2">
-                  <p className="text-sm font-medium text-slate-800 truncate flex-1" title={imgName}>{imgName}</p>
-                  <div className="flex space-x-1">
-                    <Button variant="outline" className="text-xs px-2 py-1 flex items-center" onClick={() => handleCopyLink(imgName)}>
-                      <Link className="w-3 h-3 mr-1" />
-                      {copied === imgName ? 'Copied!' : 'Copy'}
+
+        <Card className="p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <h3 className="text-lg font-semibold text-slate-800">Your Albums</h3>
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <input 
+                type="text" 
+                placeholder="New Album Name" 
+                value={newAlbumName} 
+                onChange={e => setNewAlbumName(e.target.value)} 
+                className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48"
+              />
+              <Button onClick={handleCreateAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+            </div>
+          </div>
+
+          {albums.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {albums.map(album => {
+                const previewImage = albumData[album]?.[0];
+                const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+
+                return (
+                  <Card 
+                    key={album} 
+                    onClick={() => setActiveAlbum(album)} 
+                    className="cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden"
+                  >
+                    {album !== 'Uncategorized' && (
+                      <button 
+                        onClick={(e) => handleDeleteAlbum(album, e)}
+                        className="absolute top-2 right-2 p-1.5 bg-white/80 backdrop-blur-sm text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors z-10 shadow-sm"
+                        title="Delete Album"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    
+                    <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
+                      {previewImage ? (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-0 pointer-events-none" />
+                          <img 
+                            src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(previewImage)}`} 
+                            alt={`Preview of ${album}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        </>
+                      ) : (
+                        <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />
+                      )}
+                    </div>
+
+                    <div className="p-4 text-center bg-white">
+                      <h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4>
+                      <p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg">
+              No albums yet. Create one above to get started.
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  // View 2: Inside Album
+  const currentImages = albumData[activeAlbum] || [];
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 relative">
+      
+      {/* 🚀 BATCH UPLOAD SUCCESS MODAL */}
+      {uploadedBatchLinks && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center space-x-2 text-emerald-600">
+                <CheckCircle2 className="w-6 h-6" />
+                <h3 className="font-bold text-lg text-slate-800">Batch Upload Complete</h3>
+              </div>
+              <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
+              <p className="text-sm text-slate-600">Successfully processed {uploadedBatchLinks.length} images. You can copy the permanent links below.</p>
+              
+              <div className="space-y-2">
+                {uploadedBatchLinks.map((linkObj, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm group">
+                    <div className="flex flex-col overflow-hidden mr-4">
+                      <span className="font-semibold text-slate-800 truncate" title={linkObj.name}>{linkObj.name}</span>
+                      <span className="text-xs text-slate-500 truncate mt-0.5" title={linkObj.url}>{linkObj.url}</span>
+                    </div>
+                    <Button variant="outline" className="flex-shrink-0 bg-white" onClick={() => {
+                      navigator.clipboard.writeText(linkObj.url);
+                      setCopied(linkObj.name);
+                      setTimeout(() => setCopied(''), 2000);
+                    }}>
+                      <Link className="w-3 h-3 mr-2" />
+                      {copied === linkObj.name ? 'Copied!' : 'Copy'}
                     </Button>
-                    <Button variant="danger" className="text-xs px-2 py-1" onClick={async () => { await deleteFileFromB2(imgName, 'images/'); setRefresh(r=>r+1); }}>Del</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+              <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
+              <Button onClick={() => {
+                navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.url).join('\n'));
+                setCopiedAll(true);
+                setTimeout(() => setCopiedAll(false), 2000);
+              }}>
+                <Link className="w-4 h-4 mr-2" />
+                {copiedAll ? 'Copied All Links!' : 'Copy All Links in Batch'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center space-x-4">
+          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+            <ArrowLeft className="w-6 h-6 text-slate-600" />
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">{activeAlbum}</h2>
+            <p className="text-slate-500 mt-1">Manage images in this album.</p>
+          </div>
+        </div>
+
+        {activeAlbum !== 'Uncategorized' && (
+          <Button 
+            variant="danger" 
+            onClick={() => handleDeleteAlbum(activeAlbum)}
+            disabled={isDeletingAlbum}
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> 
+            {isDeletingAlbum ? 'Deleting...' : 'Delete Entire Album'}
+          </Button>
+        )}
+      </div>
+
+      <Card className="p-6">
+        <h3 className="font-semibold text-slate-800 mb-4">Stage Files for Upload</h3>
+        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => fileInputRef.current?.click()}>
+          <UploadCloud className="w-10 h-10 text-blue-500 mb-3" />
+          <p className="text-slate-700 font-medium">Click to select files</p>
+          <p className="text-xs text-slate-500 mt-1">Files will be queued below before uploading</p>
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/>
+        </div>
+
+        {pendingFiles.length > 0 && (
+          <div className="mt-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h4 className="text-sm font-semibold text-slate-700">{pendingFiles.length} files queued</h4>
+              <Button onClick={handleBatchUpload} disabled={uploading}>
+                {uploading ? 'Uploading...' : `Upload Batch`}
+              </Button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200 text-sm">
+                  <div className="flex items-center space-x-2 truncate">
+                    <ImageIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                    <span className="truncate">{f.name}</span>
+                    <span className="text-xs text-slate-400">({(f.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                  <button onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-1 hover:bg-red-100 rounded text-red-500 transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3>
+          {currentImages.length > 0 && (
+            <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)}>
+              <Link className="w-4 h-4 mr-2" />
+              {copiedAll ? 'Copied All!' : 'Copy All Links'}
+            </Button>
+          )}
+        </div>
+        
+        {currentImages.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {currentImages.map(imgName => {
+              const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+              return (
+                <div key={imgName} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white">
+                  <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative group">
+                    <img 
+                      src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`} 
+                      alt={imgName} 
+                      className="max-h-full max-w-full object-contain" 
+                    />
+                  </div>
+                  <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
+                    <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                    <div className="flex space-x-2 w-full">
+                      <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}>
+                        <Link className="w-3 h-3 mr-1.5" />
+                        {copied === imgName ? 'Copied!' : 'Copy Link'}
+                      </Button>
+                      <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg">No images in vault.</div>}
+        ) : (
+          <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+            Album is empty. Queue and upload files above.
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -1824,7 +2141,6 @@ export default function Page() {
             </div>
           ))}
         </nav>
-        {/* Previous navigation code... */}
         
         <div className="p-4 mt-auto">
           <button 
