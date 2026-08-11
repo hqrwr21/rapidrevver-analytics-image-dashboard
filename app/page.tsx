@@ -637,28 +637,47 @@ function CatalogMonitor() {
 // --- TAB 3: MASTER CATALOG ---
 function MasterCatalog() {
   const [activeTab, setActiveTab] = useState('viewer');
+  const [viewMode, setViewMode] = useState('catalog'); // NEW: Toggle between 'catalog' and 'ads'
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
   const snapshots = useB2Files('snapshots/', refreshTrigger);
+  const adSnapshots = useB2Files('ads/', refreshTrigger);
   
   const [selectedCatFiles, setSelectedCatFiles] = useState<string[]>([]);
-  const [catSearch, setCatSearch] = useState('');
-  const [catalogData, setCatalogData] = useState<any[]>([]);
+  const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewerData, setViewerData] = useState<any[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [editFile, setEditFile] = useState('');
   const [editableRows, setEditableRows] = useState<Record<string, string>[]>([]);
   const [isEditLoaded, setIsEditLoaded] = useState(false);
 
+  // Auto-select the most recent files
   useEffect(() => {
     if (snapshots.length > 0 && selectedCatFiles.length === 0) setSelectedCatFiles([snapshots[snapshots.length - 1]]);
-  }, [snapshots.length]);
+    if (adSnapshots.length > 0 && selectedAdFiles.length === 0) setSelectedAdFiles([adSnapshots[adSnapshots.length - 1]]);
+  }, [snapshots.length, adSnapshots.length]);
 
   const loadViewerData = async () => {
+    setIsLoadingData(true);
     let combined: any[] = [];
-    for (const s of selectedCatFiles) {
-      const text = await safeGetFileContent(s, 'snapshots/');
-      combined = combined.concat(parseCSVTable(text).map(unpackRecord));
+    
+    if (viewMode === 'catalog') {
+      for (const s of selectedCatFiles) {
+        const text = await safeGetFileContent(s, 'snapshots/');
+        combined = combined.concat(parseCSVTable(text).map(unpackRecord));
+      }
+    } else {
+      for (const s of selectedAdFiles) {
+        const text = await safeGetFileContent(s, 'ads/');
+        // Ads don't need unpackRecord since they are standard flat CSVs
+        combined = combined.concat(parseCSVTable(text));
+      }
     }
-    setCatalogData(combined);
+
+    setViewerData(combined);
+    setIsLoadingData(false);
   };
 
   const handleLoadEditGrid = async () => {
@@ -688,70 +707,116 @@ function MasterCatalog() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Master Catalog Workspace</h2>
-        <p className="text-slate-500 mt-1">Browse, search, and edit your raw product data.</p>
+        <p className="text-slate-500 mt-1">Browse, search, and manage your raw data files.</p>
       </div>
 
       <div className="flex border-b border-slate-200">
-        <button onClick={() => setActiveTab('viewer')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'viewer' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Catalog Viewer</button>
-        <button onClick={() => setActiveTab('editor')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'editor' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Live Data Editor</button>
+        <button onClick={() => setActiveTab('viewer')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'viewer' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Data Viewer</button>
+        <button onClick={() => setActiveTab('editor')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'editor' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Live Catalog Editor</button>
       </div>
 
       {activeTab === 'viewer' && (
         <Card className="p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">Master Catalog Viewer</h3>
-          {snapshots.length === 0 ? <div className="text-slate-500 text-center p-8 border border-dashed rounded-lg">Upload CSV in Data Ingestion first.</div> : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Files to View</label>
-                  <div className="max-h-32 overflow-y-auto border border-slate-300 p-2 rounded-md space-y-1">
-                    {snapshots.map(s => (
-                      <label key={s} className="flex items-center space-x-2 text-sm">
-                        <input type="checkbox" checked={selectedCatFiles.includes(s)} onChange={e => { if (e.target.checked) setSelectedCatFiles(prev => prev.concat([s])); else setSelectedCatFiles(prev => prev.filter(f => f !== s)); }}/>
-                        <span>{s}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <Button variant="outline" className="mt-2 text-xs" onClick={loadViewerData}>Load Selected Files</Button>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Search Catalog</label>
-                  <input type="text" placeholder="Search loaded files..." value={catSearch} onChange={e => setCatSearch(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-white"/>
-                </div>
-              </div>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b pb-4">
+            <h3 className="font-semibold text-slate-800">Master Data Viewer</h3>
+            
+            {/* NEW: Dataset Toggle Switch */}
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button 
+                onClick={() => { setViewMode('catalog'); setViewerData([]); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'catalog' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Catalog Snapshots
+              </button>
+              <button 
+                onClick={() => { setViewMode('ads'); setViewerData([]); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${viewMode === 'ads' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Advertising Reports
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Files to View ({viewMode === 'catalog' ? 'Catalog' : 'Ads'})
+              </label>
               
-              {(() => {
-                const filtered = catSearch ? catalogData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(catSearch.toLowerCase()))) : catalogData;
-                const headers = filtered.length > 0 ? ['batch_name', ...Object.keys(filtered[0]).filter(k => k !== 'batch_name')] : [];
-                return (
-                  <>
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="text-sm font-medium text-slate-600">Total Products in View: {filtered.length}</div>
-                      {filtered.length > 0 && <Button variant="outline" onClick={() => downloadCSV(filtered, 'filtered_catalog.csv')}><Download className="w-4 h-4 mr-2"/> Export View</Button>}
-                    </div>
-                    {filtered.length > 0 ? (
-                      <div className="overflow-x-auto max-h-[500px] border border-slate-200 rounded-lg">
-                        <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap">
-                          <thead className="bg-slate-100 sticky top-0 text-slate-700"><tr>{headers.map(h => <th key={h} className="p-2 font-semibold border-b">{h}</th>)}</tr></thead>
-                          <tbody className="divide-y divide-slate-100">{filtered.slice(0, 500).map((row, i) => <tr key={i} className="hover:bg-slate-50">{headers.map(h => <td key={h} className="p-2 truncate max-w-xs">{row[h]}</td>)}</tr>)}</tbody>
-                        </table>
-                      </div>
-                    ) : <div className="p-8 text-center text-slate-500 border border-dashed rounded-lg">No data loaded. Click "Load Selected Files".</div>}
-                  </>
-                );
-              })()}
-            </>
-          )}
+              {/* Dynamic File List based on selected mode */}
+              <div className="max-h-32 overflow-y-auto border border-slate-300 p-2 rounded-md space-y-1 bg-white">
+                {viewMode === 'catalog' ? (
+                  snapshots.length === 0 ? <span className="text-xs text-slate-400 italic">No catalog files available.</span> :
+                  snapshots.map(s => (
+                    <label key={s} className="flex items-center space-x-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={selectedCatFiles.includes(s)} onChange={e => { if (e.target.checked) setSelectedCatFiles(prev => prev.concat([s])); else setSelectedCatFiles(prev => prev.filter(f => f !== s)); }} className="rounded text-blue-600 focus:ring-blue-500"/>
+                      <span className="truncate">{s}</span>
+                    </label>
+                  ))
+                ) : (
+                  adSnapshots.length === 0 ? <span className="text-xs text-slate-400 italic">No ad reports available.</span> :
+                  adSnapshots.map(s => (
+                    <label key={s} className="flex items-center space-x-2 text-sm cursor-pointer text-emerald-800">
+                      <input type="checkbox" checked={selectedAdFiles.includes(s)} onChange={e => { if (e.target.checked) setSelectedAdFiles(prev => prev.concat([s])); else setSelectedAdFiles(prev => prev.filter(f => f !== s)); }} className="rounded text-emerald-600 focus:ring-emerald-500"/>
+                      <span className="truncate">{s}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <Button onClick={loadViewerData} disabled={isLoadingData} className={`mt-2 text-xs w-full sm:w-auto ${viewMode === 'ads' ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500' : ''}`}>
+                {isLoadingData ? 'Loading...' : 'Load Selected Files'}
+              </Button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Search Loaded Data</label>
+              <input type="text" placeholder="Search rows..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-white"/>
+            </div>
+          </div>
+          
+          {(() => {
+            const filtered = searchQuery ? viewerData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) : viewerData;
+            
+            // For ads, batch_name might not exist inherently, so we dynamically grab headers
+            const headers = filtered.length > 0 ? Object.keys(filtered[0]) : [];
+            
+            return (
+              <>
+                <div className="flex justify-between items-center mb-2">
+                  <div className="text-sm font-medium text-slate-600">Total Rows in View: {filtered.length}</div>
+                  {filtered.length > 0 && <Button variant="outline" onClick={() => downloadCSV(filtered, `${viewMode}_export.csv`)}><Download className="w-4 h-4 mr-2"/> Export View</Button>}
+                </div>
+                {filtered.length > 0 ? (
+                  <div className="overflow-x-auto max-h-[500px] border border-slate-200 rounded-lg shadow-sm">
+                    <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap">
+                      <thead className={`sticky top-0 text-slate-700 ${viewMode === 'ads' ? 'bg-emerald-50' : 'bg-slate-100'}`}>
+                        <tr>
+                          {headers.map(h => <th key={h} className="p-2 font-semibold border-b">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {filtered.slice(0, 500).map((row, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            {headers.map(h => <td key={h} className="p-2 truncate max-w-xs">{row[h]}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <div className="p-8 text-center text-slate-500 border border-dashed rounded-lg bg-slate-50">No data loaded. Select files and click "Load Selected Files".</div>}
+              </>
+            );
+          })()}
         </Card>
       )}
 
       {activeTab === 'editor' && (
         <div className="space-y-6">
           <Card className="p-6">
-            <h3 className="font-semibold text-slate-800 mb-4">Live Data Editor</h3>
+            <h3 className="font-semibold text-slate-800 mb-4">Live Data Editor (Catalog Only)</h3>
             <div className="flex flex-col sm:flex-row gap-4 items-center mb-4">
               <select className="border-slate-300 p-2 border rounded-md text-sm flex-1 w-full bg-white" value={editFile} onChange={e => { setEditFile(e.target.value); setIsEditLoaded(false); }}>
-                <option value="">-- Select Snapshot to Edit --</option>
+                <option value="">-- Select Catalog Snapshot to Edit --</option>
                 {snapshots.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <Button onClick={handleLoadEditGrid}><Edit3 className="w-4 h-4 mr-2"/> Load Editable Grid</Button>
@@ -1422,6 +1487,9 @@ function AdsAnalysis() {
   const [refreshTrigger] = useState(0);
   const adFiles = useB2Files('ads/', refreshTrigger);
 
+  // NEW: State for selecting specific Ad Reports
+  const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
+
   // Filters
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [selectedAdGroups, setSelectedAdGroups] = useState<string[]>([]);
@@ -1442,20 +1510,33 @@ function AdsAnalysis() {
   const [rawAdRows, setRawAdRows] = useState<Record<string, string>[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
+  // Automatically select the most recent ad report when they load
+  useEffect(() => {
+    if (adFiles.length > 0 && selectedAdFiles.length === 0) {
+      setSelectedAdFiles([adFiles[adFiles.length - 1]]);
+    }
+  }, [adFiles.length]);
+
+  // Fetch only the SELECTED ad files
   useEffect(() => {
     const loadAdsData = async () => {
+      if (selectedAdFiles.length === 0) {
+        setRawAdRows([]);
+        return;
+      }
+      
       setIsDataLoading(true);
       let combined: Record<string, string>[] = [];
-      for (const fileName of adFiles) {
+      for (const fileName of selectedAdFiles) {
         const text = await safeGetFileContent(fileName, 'ads/');
         combined = combined.concat(parseCSVTable(text));
       }
       setRawAdRows(combined);
       setIsDataLoading(false);
     };
-    if (adFiles.length > 0) loadAdsData();
-    else setRawAdRows([]);
-  }, [adFiles.length]);
+    
+    loadAdsData();
+  }, [selectedAdFiles]);
 
   const filteredData = useMemo(() => {
     return rawAdRows.filter(row => {
@@ -1547,6 +1628,29 @@ function AdsAnalysis() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card className="p-4 space-y-4 lg:col-span-1 border-slate-200">
+          
+          {/* NEW: Ad Report Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Source Reports</label>
+            <div className="max-h-28 overflow-y-auto border border-slate-300 p-2 rounded-md space-y-1 bg-white">
+              {adFiles.length === 0 && <span className="text-[10px] text-slate-400 italic">No ad reports found. Upload in Ingestion Hub.</span>}
+              {adFiles.map(s => (
+                <label key={s} className="flex items-center space-x-2 text-xs cursor-pointer text-emerald-800">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedAdFiles.includes(s)} 
+                    onChange={e => { 
+                      if (e.target.checked) setSelectedAdFiles(prev => prev.concat([s])); 
+                      else setSelectedAdFiles(prev => prev.filter(f => f !== s)); 
+                    }} 
+                    className="rounded text-emerald-600 focus:ring-emerald-500 w-3 h-3"
+                  />
+                  <span className="truncate">{s}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <h3 className="font-semibold text-slate-800 border-b pb-2 text-sm pt-2">Target Filters</h3>
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Campaign Name</label>
@@ -1586,9 +1690,9 @@ function AdsAnalysis() {
           {isDataLoading ? (
             <Card className="p-12 text-center text-slate-500"><p className="animate-pulse">Loading big data from Backblaze B2...</p></Card>
           ) : rawAdRows.length === 0 ? (
-            <Card className="p-12 text-center text-slate-500 border-dashed">
+            <Card className="p-12 text-center text-slate-500 border-dashed bg-slate-50">
               <TrendingUp className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-              <p>Please upload an Amazon Search Term CSV report in the Data Ingestion Hub to populate this dashboard.</p>
+              <p>Please select at least one Ad Report from the "Source Reports" panel to analyze.</p>
             </Card>
           ) : (
             <>
