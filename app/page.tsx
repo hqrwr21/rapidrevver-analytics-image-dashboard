@@ -6,7 +6,8 @@ import {
   UploadCloud, Database, Activity, TrendingUp, Search, 
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
-  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check 
+  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check,
+  List, ShoppingCart, Store, ShoppingBag
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -14,8 +15,8 @@ import {
 } from 'recharts';
 
 import { 
-  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, unlockBackblazeCors,
-  renameImageInB2, renameAlbumInB2 // <-- ADD THESE TWO
+  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, 
+  unlockBackblazeCors, renameImageInB2, renameAlbumInB2 
 } from './actions/b2';
 
 // ==========================================
@@ -213,10 +214,9 @@ function useB2Files(folder: string, refreshTrigger: number) {
 }
 
 // ==========================================
-// 4. MODULE COMPONENTS (The Sidebar Items)
+// 4. MODULE COMPONENTS
 // ==========================================
 
-// --- TAB 1: DATA INGESTION ---
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
@@ -386,6 +386,222 @@ function DataIngestion() {
             ) : <p className="text-sm text-slate-400 italic">No ad reports stored.</p>}
           </div>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// --- TAB 9: MASTERLIST WORKSPACE ---
+function MasterlistWorkspace() {
+  const [platform, setPlatform] = useState<'amazon' | 'walmart' | 'ebay'>('amazon');
+  const [data, setData] = useState<Record<string, any[]>>({ amazon: [], walmart: [], ebay: [] });
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // NEW: State for the Product Deep-Dive Modal
+  const [selectedProduct, setSelectedProduct] = useState<Record<string, string> | null>(null);
+
+  const fileNames = { 
+    amazon: 'amazon_master.csv', 
+    walmart: 'walmart_master.csv', 
+    ebay: 'ebay_master.csv' 
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (data[platform].length > 0) return;
+      
+      setLoading(true);
+      const text = await safeGetFileContent(fileNames[platform], 'masterlists/');
+      if (text) {
+        setData(prev => ({ ...prev, [platform]: parseCSVTable(text) }));
+      }
+      setLoading(false);
+    };
+    loadData();
+  }, [platform]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    setLoading(true);
+    const text = await files[0].text();
+    
+    const success = await safeUploadTextToB2(text, fileNames[platform], 'masterlists/');
+    if (success) {
+      setData(prev => ({ ...prev, [platform]: parseCSVTable(text) }));
+      alert(`✅ ${platform.toUpperCase()} Masterlist successfully updated!`);
+    } else {
+      alert("❌ Upload failed. Please try again.");
+    }
+    
+    setLoading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const currentData = data[platform] || [];
+  
+  const filteredData = searchQuery 
+    ? currentData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
+    : currentData;
+    
+  const headers = currentData.length > 0 ? Object.keys(currentData[0]) : [];
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 relative">
+      
+      {/* 🚀 NEW: PRODUCT DEEP-DIVE MODAL */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center space-x-3">
+                {selectedProduct['Hero Image'] && selectedProduct['Hero Image'].startsWith('http') ? (
+                  <img src={selectedProduct['Hero Image']} alt="Hero" className="w-12 h-12 object-cover rounded-md border border-slate-200" />
+                ) : (
+                  <div className="w-12 h-12 bg-slate-200 rounded-md flex items-center justify-center"><ImageIcon className="w-6 h-6 text-slate-400" /></div>
+                )}
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct['Part No'] || selectedProduct['ASIN'] || 'Product Details'}</h3>
+                  <p className="text-xs text-slate-500">{selectedProduct['Title'] || 'No title available'}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedProduct(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-white">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+                {Object.entries(selectedProduct).map(([key, value]) => {
+                  if (!value) return null; // Skip empty fields
+                  const isImage = key.toLowerCase().includes('image') && String(value).startsWith('http');
+                  
+                  return (
+                    <div key={key} className="flex flex-col border-b border-slate-100 pb-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{key}</span>
+                      {isImage ? (
+                        <a href={value as string} target="_blank" rel="noreferrer" className="text-blue-500 text-sm hover:underline flex items-center">
+                          <Link className="w-3 h-3 mr-1" /> View Image
+                        </a>
+                      ) : (
+                        <span className="text-sm text-slate-800 break-words">{value as string}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <Button onClick={() => setSelectedProduct(null)}>Close Viewer</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Marketplace Masterlists</h2>
+          <p className="text-slate-500 mt-1">Centralized database for your Amazon, Walmart, and eBay product catalogs.</p>
+        </div>
+        
+        <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
+        
+        <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
+          <UploadCloud className="w-4 h-4 mr-2" />
+          Overwrite / Upload {platform.toUpperCase()} List
+        </Button>
+      </div>
+
+      <div className="flex border-b border-slate-200 overflow-x-auto">
+        <button onClick={() => { setPlatform('amazon'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'amazon' ? 'border-amber-500 text-amber-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <ShoppingCart className="w-4 h-4 mr-2" /> Amazon Masterlist
+        </button>
+        <button onClick={() => { setPlatform('walmart'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'walmart' ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <Store className="w-4 h-4 mr-2" /> Walmart Masterlist
+        </button>
+        <button onClick={() => { setPlatform('ebay'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'ebay' ? 'border-emerald-500 text-emerald-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <ShoppingBag className="w-4 h-4 mr-2" /> eBay Masterlist
+        </button>
+      </div>
+
+      <Card className="p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <h3 className="font-semibold text-slate-800 capitalize">{platform} Database</h3>
+          <input 
+            type="text" 
+            placeholder={`Search ASIN, SKU, or Keyword...`} 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)} 
+            className="w-full sm:w-80 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center text-slate-500 animate-pulse">Loading {platform} database from Backblaze...</div>
+        ) : currentData.length === 0 ? (
+          <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+            <List className="w-12 h-12 mx-auto mb-4 text-slate-300" />
+            <p>No masterlist found for {platform.toUpperCase()}.</p>
+            <p className="text-sm mt-2">Click the Upload button at the top right to import your CSV file.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} records</span>
+              <Button variant="outline" onClick={() => downloadCSV(filteredData, `${platform}_masterlist.csv`)}>
+                <Download className="w-4 h-4 mr-2"/> Export to CSV
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg shadow-sm">
+              <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap">
+                <thead className="bg-slate-100 sticky top-0 text-slate-700 border-b z-10">
+                  <tr>
+                    <th className="p-3 font-semibold border-r border-slate-200 bg-slate-100 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Action</th>
+                    {headers.map(h => <th key={h} className="p-3 font-semibold border-r border-slate-200 last:border-0">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {filteredData.slice(0, 500).map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">
+                        <Button variant="secondary" className="text-xs py-1 px-3 w-full whitespace-nowrap" onClick={() => setSelectedProduct(row)}>
+                          <ZoomIn className="w-3 h-3 mr-1" /> View Details
+                        </Button>
+                      </td>
+                      {headers.map(h => {
+                        const val = String(row[h] || '');
+                        const isImage = h.toLowerCase().includes('image') && val.startsWith('http');
+                        const isStatusActive = h.toLowerCase() === 'status' && val.toLowerCase() === 'active';
+
+                        return (
+                          <td key={h} className="p-2 truncate max-w-[200px] border-r border-slate-100 last:border-0" title={val}>
+                            {isImage ? (
+                              <img src={val} alt="thumb" className="w-8 h-8 object-cover rounded border border-slate-200" loading="lazy" />
+                            ) : isStatusActive ? (
+                              <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">{val}</span>
+                            ) : (
+                              val
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredData.length > 500 && (
+                <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t border-slate-200">
+                  Showing top 500 results. Use the search bar to find specific items or Export to view all.
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </Card>
     </div>
   );
@@ -651,14 +867,13 @@ function CatalogMonitor() {
   );
 }
 
-// --- TAB 3: MASTER CATALOG ---
 function MasterCatalog() {
   const [activeTab, setActiveTab] = useState('viewer');
   const [viewMode, setViewMode] = useState('catalog');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   const snapshots = useB2Files('snapshots/', refreshTrigger);
-  const adSnapshots = useB2Files('marketing/', refreshTrigger); // Changed to marketing
+  const adSnapshots = useB2Files('marketing/', refreshTrigger);
   
   const [selectedCatFiles, setSelectedCatFiles] = useState<string[]>([]);
   const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
@@ -868,7 +1083,6 @@ function MasterCatalog() {
   );
 }
 
-// --- TAB 4: ASIN DEEP DIVE ---
 function AsinDeepDive() {
   const [refreshTrigger] = useState(0);
   const snapshots = useB2Files('snapshots/', refreshTrigger);
@@ -960,7 +1174,6 @@ function AsinDeepDive() {
   );
 }
 
-// --- TAB 5: GLOBAL DELTA VIEW ---
 function GlobalDeltaView() {
   const [refreshTrigger] = useState(0);
   const snapshots = useB2Files('snapshots/', refreshTrigger);
@@ -1095,7 +1308,6 @@ function GlobalDeltaView() {
   );
 }
 
-// --- TAB 6: IMAGE VAULT ---
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
   const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
@@ -1105,18 +1317,15 @@ function ImageVault() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const images = useB2Files('images/', refresh);
 
-  // Album Management State
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // Editing States
   const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
   const [editAlbumText, setEditAlbumText] = useState('');
   const [editingImage, setEditingImage] = useState<string | null>(null);
   const [editImageText, setEditImageText] = useState('');
 
-  // Batch Upload & Success Modal State
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
 
@@ -1162,14 +1371,13 @@ function ImageVault() {
     
     const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_');
     
-    // If it's just an empty local shell album
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
       return;
     }
 
-    setIsDeletingAlbum(true); // Reusing loading state for UI feedback
+    setIsDeletingAlbum(true); 
     const res = await renameAlbumInB2(oldAlbumName, newName);
     setIsDeletingAlbum(false);
     
@@ -1214,7 +1422,6 @@ function ImageVault() {
       return;
     }
     
-    // Auto-preserve file extension
     const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
     let newName = editImageText.trim().replace(/[^a-zA-Z0-9-_ \.\(\)]/g, '_');
     if (oldExt && !newName.endsWith(`.${oldExt}`)) {
@@ -1279,7 +1486,7 @@ function ImageVault() {
     if (successfulUploads.length > 0) {
       setUploadedBatchLinks(successfulUploads);
     } else {
-      alert("Upload failed. Did you click the 'Unlock Uploads' button in the Data Ingestion Hub to fix your CORS?");
+      alert("Upload failed. Please check your network connection and try again.");
     }
   };
 
@@ -1318,7 +1525,6 @@ function ImageVault() {
     setRefresh(r => r + 1);
   };
 
-  // View 1: ALbum List
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -1354,7 +1560,6 @@ function ImageVault() {
                     onClick={() => { if(editingAlbum !== album) setActiveAlbum(album); }} 
                     className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}
                   >
-                    {/* EDIT & DELETE BUTTONS */}
                     {album !== 'Uncategorized' && (
                       <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
@@ -1424,7 +1629,6 @@ function ImageVault() {
     );
   }
 
-  // View 2: Inside Album
   const currentImages = albumData[activeAlbum] || [];
 
   return (
@@ -1565,7 +1769,6 @@ function ImageVault() {
                   </div>
                   <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
                     
-                    {/* INLINE IMAGE RENAME */}
                     {editingImage === imgName ? (
                       <div className="flex items-center space-x-1">
                         <input 
@@ -1610,11 +1813,10 @@ function ImageVault() {
   );
 }
 
-// --- TAB 7: ADS ANALYSIS ---
 function AdsAnalysis() {
   const [activeTab, setActiveTab] = useState('perf');
   const [refreshTrigger] = useState(0);
-  const adFiles = useB2Files('marketing/', refreshTrigger); // Changed to marketing/
+  const adFiles = useB2Files('marketing/', refreshTrigger);
 
   const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
@@ -1959,7 +2161,6 @@ function AdsAnalysis() {
   );
 }
 
-// --- TAB 8: SEO INTELLIGENCE ---
 function SeoIntelligence() {
   const [activeTab, setActiveTab] = useState('audit');
   const tabs = [
@@ -1970,7 +2171,7 @@ function SeoIntelligence() {
 
   const [refreshTrigger] = useState(0);
   const catSnapshots = useB2Files('snapshots/', refreshTrigger);
-  const adSnapshots = useB2Files('marketing/', refreshTrigger); // Changed to marketing/
+  const adSnapshots = useB2Files('marketing/', refreshTrigger);
 
   const [selectedAdFile, setSelectedAdFile] = useState('');
   const [selectedCatFile, setSelectedCatFile] = useState('');
@@ -2306,6 +2507,7 @@ export default function Page() {
     {
       title: 'Catalog Intelligence',
       items: [
+        { id: 'masterlist', label: 'Marketplace Masterlists', icon: List },
         { id: 'catalog', label: 'Master Catalog', icon: FileText },
         { id: 'monitor', label: 'Catalog Monitor', icon: Activity },
         { id: 'deepdive', label: 'ASIN Deep Dive', icon: ZoomIn },
@@ -2388,11 +2590,12 @@ export default function Page() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-[1400px] mx-auto">
             {activeModule === 'ingestion' && <DataIngestion />}
-            {activeModule === 'monitor' && <CatalogMonitor />}
+            {activeModule === 'images' && <ImageVault />}
+            {activeModule === 'masterlist' && <MasterlistWorkspace />}
             {activeModule === 'catalog' && <MasterCatalog />}
+            {activeModule === 'monitor' && <CatalogMonitor />}
             {activeModule === 'deepdive' && <AsinDeepDive />}
             {activeModule === 'global_delta' && <GlobalDeltaView />}
-            {activeModule === 'images' && <ImageVault />}
             {activeModule === 'ads' && <AdsAnalysis />}
             {activeModule === 'seo' && <SeoIntelligence />}
           </div>
