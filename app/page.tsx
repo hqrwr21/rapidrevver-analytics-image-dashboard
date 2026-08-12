@@ -87,7 +87,22 @@ const parseCSVTable = (text: string): Record<string, string>[] => {
   }
 
   if (rows.length < 2) return []; 
-  const headers = rows[0].map(h => h.trim());
+  
+  // 🔥 UPGRADED: Intelligent Duplicate Column Handler
+  const rawHeaders = rows[0].map(h => h.trim() || 'Empty');
+  const headers: string[] = [];
+  const headerCounts: Record<string, number> = {};
+
+  rawHeaders.forEach(h => {
+    if (headerCounts[h]) {
+      headers.push(`${h}_${headerCounts[h]}`);
+      headerCounts[h]++;
+    } else {
+      headers.push(h);
+      headerCounts[h] = 1;
+    }
+  });
+
   return rows.slice(1).map(row => {
     const obj: Record<string, string> = {};
     headers.forEach((h, i) => { obj[h] = row[i] !== undefined ? row[i].trim() : ''; });
@@ -391,81 +406,116 @@ function DataIngestion() {
   );
 }
 
-// --- TAB 9: MASTERLIST WORKSPACE ---
+// --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
+const MASTERLIST_SCHEMA = [
+  {
+    group: "Shared Data", color: "bg-slate-800", text: "text-white",
+    subgroups: [
+      { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part TYpe Jobber", "Status", "Fitment Info", "FTP QTY", "Jobber Price"] },
+      { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Cost Price", "Cost Price = 8%", "Product Type", "item Type Keyword", "Hollander/Part Code", "Material", "Number of Items", "Color/ Finish", "Size for Bullet", "Installation Type", "Pattern"] },
+      { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "Material", "Number of Items", "Exterior Finish", "Color", "Size for Attribute", "Size Digit", "Model Brand Part Fits", "OEM Equivalent Part Number", "Retention Attrbute", "Pattern", "Included Components"] },
+      { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Generic Keywords", "Item Length", "Item Package Length", "Package Length Unit", "Item Package Width", "Package Width Unit", "Item Package Height", "Package Height Unit", "Package Weight"] },
+      { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Package Weight Unit", "Fitment Type"] }
+    ]
+  },
+  {
+    group: "OxGord", color: "bg-blue-600", text: "text-white",
+    subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
+  },
+  {
+    group: "Fuel Rider", color: "bg-red-600", text: "text-white",
+    subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
+  },
+  {
+    group: "MUA", color: "bg-purple-600", text: "text-white",
+    subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
+  },
+  {
+    group: "Walmart", color: "bg-sky-500", text: "text-white",
+    subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }]
+  },
+  {
+    group: "eBay", color: "bg-emerald-600", text: "text-white",
+    subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }]
+  },
+  {
+    group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white",
+    subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }]
+  },
+  {
+    group: "Ride And Rover", color: "bg-indigo-600", text: "text-white",
+    subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }]
+  }
+];
+
+const flattenedSchemaCols = MASTERLIST_SCHEMA.flatMap(g => g.subgroups.flatMap(sg => sg.cols));
+
+// Pre-calculate exact global column indices to prevent duplicate column name bugs!
+let globalRunningIndex = 0;
+const SCHEMA_WITH_INDICES = MASTERLIST_SCHEMA.map(g => ({
+  ...g,
+  subgroups: g.subgroups.map(sg => ({
+    ...sg,
+    colsWithIndex: sg.cols.map(c => ({ name: c, absIndex: globalRunningIndex++ }))
+  }))
+}));
+
 function MasterlistWorkspace() {
-  const [platform, setPlatform] = useState<'amazon' | 'walmart' | 'ebay'>('amazon');
-  const [data, setData] = useState<Record<string, any[]>>({ amazon: [], walmart: [], ebay: [] });
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // NEW: State for the Product Deep-Dive Modal
   const [selectedProduct, setSelectedProduct] = useState<Record<string, string> | null>(null);
-
-  const fileNames = { 
-    amazon: 'amazon_master.csv', 
-    walmart: 'walmart_master.csv', 
-    ebay: 'ebay_master.csv' 
-  };
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
-      if (data[platform].length > 0) return;
-      
       setLoading(true);
-      const text = await safeGetFileContent(fileNames[platform], 'masterlists/');
-      if (text) {
-        setData(prev => ({ ...prev, [platform]: parseCSVTable(text) }));
-      }
+      const text = await safeGetFileContent('unified_masterlist.csv', 'masterlists/');
+      if (text) setData(parseCSVTable(text));
       setLoading(false);
     };
     loadData();
-  }, [platform]);
+  }, [refreshTrigger]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    
+
     setLoading(true);
     const text = await files[0].text();
-    
-    const success = await safeUploadTextToB2(text, fileNames[platform], 'masterlists/');
+
+    const success = await safeUploadTextToB2(text, 'unified_masterlist.csv', 'masterlists/');
     if (success) {
-      setData(prev => ({ ...prev, [platform]: parseCSVTable(text) }));
-      alert(`✅ ${platform.toUpperCase()} Masterlist successfully updated!`);
+      setData(parseCSVTable(text));
+      alert(`✅ Unified Masterlist successfully updated!`);
+      setRefreshTrigger(prev => prev + 1);
     } else {
       alert("❌ Upload failed. Please try again.");
     }
-    
     setLoading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const currentData = data[platform] || [];
-  
   const filteredData = searchQuery 
-    ? currentData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
-    : currentData;
+    ? data.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
+    : data;
     
-  const headers = currentData.length > 0 ? Object.keys(currentData[0]) : [];
+  const headers = data.length > 0 ? Object.keys(data[0]) : [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
-      {/* 🚀 NEW: PRODUCT DEEP-DIVE MODAL */}
+      {/* GROUPED DEEP-DIVE MODAL */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-3">
-                {selectedProduct['Hero Image'] && selectedProduct['Hero Image'].startsWith('http') ? (
-                  <img src={selectedProduct['Hero Image']} alt="Hero" className="w-12 h-12 object-cover rounded-md border border-slate-200" />
-                ) : (
-                  <div className="w-12 h-12 bg-slate-200 rounded-md flex items-center justify-center"><ImageIcon className="w-6 h-6 text-slate-400" /></div>
-                )}
+                <div className="w-12 h-12 bg-slate-200 rounded-md flex items-center justify-center"><List className="w-6 h-6 text-slate-400" /></div>
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct['Part No'] || selectedProduct['ASIN'] || 'Product Details'}</h3>
-                  <p className="text-xs text-slate-500">{selectedProduct['Title'] || 'No title available'}</p>
+                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct[headers[0]] || 'Product Details'}</h3>
+                  <p className="text-xs text-slate-500">Full Catalog Profile</p>
                 </div>
               </div>
               <button onClick={() => setSelectedProduct(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
@@ -473,26 +523,37 @@ function MasterlistWorkspace() {
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 bg-white">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                {Object.entries(selectedProduct).map(([key, value]) => {
-                  if (!value) return null; // Skip empty fields
-                  const isImage = key.toLowerCase().includes('image') && String(value).startsWith('http');
-                  
-                  return (
-                    <div key={key} className="flex flex-col border-b border-slate-100 pb-2">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{key}</span>
-                      {isImage ? (
-                        <a href={value as string} target="_blank" rel="noreferrer" className="text-blue-500 text-sm hover:underline flex items-center">
-                          <Link className="w-3 h-3 mr-1" /> View Image
-                        </a>
-                      ) : (
-                        <span className="text-sm text-slate-800 break-words">{value as string}</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6">
+              {SCHEMA_WITH_INDICES.map(group => (
+                <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <h4 className={`text-xs font-bold p-2 uppercase tracking-wider ${group.color} ${group.text}`}>{group.group}</h4>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50">
+                    {group.subgroups.flatMap(sg => sg.colsWithIndex).map((colObj) => {
+                      
+                      const actualHeaderKey = headers[colObj.absIndex];
+                      if (!actualHeaderKey) return null;
+                      
+                      const value = selectedProduct[actualHeaderKey];
+                      if (!value) return null;
+
+                      const isImage = actualHeaderKey.toLowerCase().includes('image') && String(value).startsWith('http');
+
+                      return (
+                        <div key={colObj.absIndex} className="flex flex-col border-b border-slate-200 pb-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">{colObj.name}</span>
+                          {isImage ? (
+                            <a href={value as string} target="_blank" rel="noreferrer" className="text-blue-500 text-xs hover:underline flex items-center">
+                              <Link className="w-3 h-3 mr-1" /> View Media
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-800 break-words font-medium">{value as string}</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
@@ -502,111 +563,115 @@ function MasterlistWorkspace() {
         </div>
       )}
 
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Marketplace Masterlists</h2>
-          <p className="text-slate-500 mt-1">Centralized database for your Amazon, Walmart, and eBay product catalogs.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Unified Masterlist</h2>
+          <p className="text-slate-500 mt-1">Your entire 90+ column product database. ⚠️ Ensure the top 2 Excel rows are deleted before uploading!</p>
         </div>
         
         <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-        
         <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
           <UploadCloud className="w-4 h-4 mr-2" />
-          Overwrite / Upload {platform.toUpperCase()} List
+          Overwrite / Upload Master CSV
         </Button>
-      </div>
-
-      <div className="flex border-b border-slate-200 overflow-x-auto">
-        <button onClick={() => { setPlatform('amazon'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'amazon' ? 'border-amber-500 text-amber-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          <ShoppingCart className="w-4 h-4 mr-2" /> Amazon Masterlist
-        </button>
-        <button onClick={() => { setPlatform('walmart'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'walmart' ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          <Store className="w-4 h-4 mr-2" /> Walmart Masterlist
-        </button>
-        <button onClick={() => { setPlatform('ebay'); setSearchQuery(''); }} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap flex items-center ${platform === 'ebay' ? 'border-emerald-500 text-emerald-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          <ShoppingBag className="w-4 h-4 mr-2" /> eBay Masterlist
-        </button>
       </div>
 
       <Card className="p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-          <h3 className="font-semibold text-slate-800 capitalize">{platform} Database</h3>
-          <input 
-            type="text" 
-            placeholder={`Search ASIN, SKU, or Keyword...`} 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="w-full sm:w-80 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
-          />
+          <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} active records</span>
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <input 
+              type="text" 
+              placeholder={`Search entire database...`} 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)} 
+              className="w-full sm:w-80 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
+            />
+            <Button variant="outline" onClick={() => downloadCSV(filteredData, `unified_masterlist.csv`)}>
+              <Download className="w-4 h-4 mr-2"/> Export
+            </Button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-500 animate-pulse">Loading {platform} database from Backblaze...</div>
-        ) : currentData.length === 0 ? (
+          <div className="p-12 text-center text-slate-500 animate-pulse">Loading super-grid from cloud...</div>
+        ) : data.length === 0 ? (
           <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
             <List className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-            <p>No masterlist found for {platform.toUpperCase()}.</p>
-            <p className="text-sm mt-2">Click the Upload button at the top right to import your CSV file.</p>
+            <p>No master database loaded.</p>
+            <p className="text-sm mt-2">Click the Upload button above to import your flat CSV file.</p>
           </div>
         ) : (
-          <>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} records</span>
-              <Button variant="outline" onClick={() => downloadCSV(filteredData, `${platform}_masterlist.csv`)}>
-                <Download className="w-4 h-4 mr-2"/> Export to CSV
-              </Button>
-            </div>
+          <div className="overflow-x-auto max-h-[700px] border border-slate-200 rounded-lg shadow-sm">
+            <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap border-collapse">
+              <thead className="bg-slate-100 sticky top-0 z-20">
+                {/* TIER 1: TOP LEVEL GROUPS */}
+                <tr>
+                  <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-0 z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
+                  {MASTERLIST_SCHEMA.map(g => {
+                    const totalCols = g.subgroups.reduce((acc, sg) => acc + sg.cols.length, 0);
+                    return <th key={g.group} colSpan={totalCols} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
+                  })}
+                </tr>
+                
+                {/* TIER 2: SUB GROUPS */}
+                <tr>
+                  {MASTERLIST_SCHEMA.flatMap((g, gIndex) => g.subgroups.map((sg, sgIndex) => (
+                    <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={sg.cols.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
+                  )))}
+                </tr>
 
-            <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg shadow-sm">
-              <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap">
-                <thead className="bg-slate-100 sticky top-0 text-slate-700 border-b z-10">
-                  <tr>
-                    <th className="p-3 font-semibold border-r border-slate-200 bg-slate-100 sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0]">Action</th>
-                    {headers.map(h => <th key={h} className="p-3 font-semibold border-r border-slate-200 last:border-0">{h}</th>)}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredData.slice(0, 500).map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">
-                        <Button variant="secondary" className="text-xs py-1 px-3 w-full whitespace-nowrap" onClick={() => setSelectedProduct(row)}>
-                          <ZoomIn className="w-3 h-3 mr-1" /> View Details
-                        </Button>
-                      </td>
-                      {headers.map(h => {
-                        const val = String(row[h] || '');
-                        const isImage = h.toLowerCase().includes('image') && val.startsWith('http');
-                        const isStatusActive = h.toLowerCase() === 'status' && val.toLowerCase() === 'active';
-
-                        return (
-                          <td key={h} className="p-2 truncate max-w-[200px] border-r border-slate-100 last:border-0" title={val}>
-                            {isImage ? (
-                              <img src={val} alt="thumb" className="w-8 h-8 object-cover rounded border border-slate-200" loading="lazy" />
-                            ) : isStatusActive ? (
-                              <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">{val}</span>
-                            ) : (
-                              val
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
+                {/* TIER 3: ACTUAL COLUMN NAMES */}
+                <tr>
+                  {flattenedSchemaCols.map((col, i) => (
+                    <th key={i} className="p-2 text-[10px] font-semibold border-r border-b border-slate-300 bg-white truncate max-w-[150px]" title={col}>{col}</th>
                   ))}
-                </tbody>
-              </table>
-              {filteredData.length > 500 && (
-                <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t border-slate-200">
-                  Showing top 500 results. Use the search bar to find specific items or Export to view all.
-                </div>
-              )}
-            </div>
-          </>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {filteredData.slice(0, 500).map((row, rowIndex) => (
+                  <tr key={rowIndex} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">
+                      <Button variant="secondary" className="text-[10px] py-1 px-3 w-full whitespace-nowrap" onClick={() => setSelectedProduct(row)}>
+                        <ZoomIn className="w-3 h-3 mr-1" /> View Details
+                      </Button>
+                    </td>
+                    
+                    {flattenedSchemaCols.map((colName, colIndex) => {
+                      const actualHeaderKey = headers[colIndex];
+                      if (!actualHeaderKey) return <td key={colIndex} className="p-2 border-r border-slate-100"></td>;
+
+                      const val = String(row[actualHeaderKey] || '');
+                      const isImage = actualHeaderKey.toLowerCase().includes('image') && val.startsWith('http');
+                      const isStatusActive = actualHeaderKey.toLowerCase() === 'status' && val.toLowerCase() === 'active';
+
+                      return (
+                        <td key={colIndex} className="p-2 truncate max-w-[150px] border-r border-slate-100 text-[11px]" title={val}>
+                          {isImage ? (
+                            <img src={val} alt="thumb" className="w-8 h-8 object-cover rounded border border-slate-200" loading="lazy" />
+                          ) : isStatusActive ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-semibold">{val}</span>
+                          ) : (
+                            val
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredData.length > 500 && (
+              <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 border-t border-slate-200">
+                Showing top 500 results. Use the search bar to find specific items.
+              </div>
+            )}
+          </div>
         )}
       </Card>
     </div>
   );
 }
-
 function CatalogMonitor() {
   const [activeTab, setActiveTab] = useState('analysis');
   const [loading, setLoading] = useState(false);
