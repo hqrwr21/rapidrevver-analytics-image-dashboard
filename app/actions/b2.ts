@@ -2,8 +2,9 @@
 "use server";
 
 import { 
-  S3Client, PutObjectCommand, ListObjectsV2Command, 
-  DeleteObjectCommand, GetObjectCommand 
+  S3Client, ListObjectsV2Command, 
+  DeleteObjectCommand, GetObjectCommand, PutObjectCommand,
+  PutBucketCorsCommand // <-- Added this
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -35,26 +36,38 @@ function getS3Target(folder: string) {
 }
 
 // ==========================================
-// 🚀 NATIVE SERVER UPLOAD
+// 🚀 UNLOCK CORS PERMANENTLY
 // ==========================================
-export async function uploadFileToB2(formData: FormData) {
-  const file = formData.get("file") as File;
-  const folder = formData.get("folder") as string;
-  
-  const { client, bucket } = getS3Target(folder);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  
-  const command = new PutObjectCommand({
-    Bucket: bucket,
-    Key: `${folder}${file.name}`,
-    Body: buffer,
-    ContentType: file.type || "application/octet-stream",
-  });
-  
-  await client.send(command);
-  return true;
+export async function unlockBackblazeCors() {
+  const corsConfig = {
+    CORSConfiguration: {
+      CORSRules: [
+        {
+          AllowedOrigins: ["*"], // Allows browser uploads
+          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"], // MUST allow PUT
+          AllowedHeaders: ["*"],
+          ExposeHeaders: ["ETag"],
+          MaxAgeSeconds: 3000,
+        },
+      ],
+    },
+  };
+
+  try {
+    await s3Data.send(new PutBucketCorsCommand({ Bucket: process.env.B2_DATA_BUCKET!, ...corsConfig }));
+    if (process.env.B2_DATA_BUCKET !== process.env.B2_IMAGE_BUCKET) {
+      await s3Images.send(new PutBucketCorsCommand({ Bucket: process.env.B2_IMAGE_BUCKET!, ...corsConfig }));
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("CORS Unlock Error:", error);
+    return { success: false, error: error.message };
+  }
 }
 
+// ==========================================
+// STANDARD B2 FUNCTIONS
+// ==========================================
 export async function listFiles(folder: string) {
   try {
     const { client, bucket } = getS3Target(folder);
@@ -79,19 +92,16 @@ export async function getPresignedDownloadUrl(fileName: string, folder: string) 
   return getSignedUrl(client, command, { expiresIn: 3600 });
 }
 
-// ==========================================
-// 🔗 GET PUBLIC IMAGE URL (Fixed for Spaces)
-// ==========================================
 export async function getPublicB2Url(fileName: string, folder: string) {
   const { bucket } = getS3Target(folder);
-  const endpoint = folder.startsWith("images/") 
-    ? process.env.B2_IMAGE_ENDPOINT 
-    : process.env.B2_DATA_ENDPOINT;
-  
-  // Combine folder and filename, then encode each segment individually
-  // This properly formats spaces as %20 and safely handles special characters
+  const endpoint = folder.startsWith("images/") ? process.env.B2_IMAGE_ENDPOINT : process.env.B2_DATA_ENDPOINT;
   const fullPath = `${folder}${fileName}`;
   const safePath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  
   return `${endpoint}/${bucket}/${safePath}`;
+}
+
+export async function getPresignedUploadUrl(fileName: string, folder: string, contentType: string) {
+  const { client, bucket } = getS3Target(folder);
+  const command = new PutObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}`, ContentType: contentType });
+  return getSignedUrl(client, command, { expiresIn: 900 });
 }

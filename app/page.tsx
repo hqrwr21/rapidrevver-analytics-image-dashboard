@@ -1,22 +1,20 @@
 "use client";
 
-import { logout } from './actions/auth'; // <--- ADD THIS LINE
+import { logout } from './actions/auth';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   UploadCloud, Database, Activity, TrendingUp, Search, 
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
-  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X
+  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock
 } from 'lucide-react';
-
-// ... rest of your code
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
 
 import { 
-  uploadFileToB2, listFiles, deleteFileFromB2, getPublicB2Url
+  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, unlockBackblazeCors
 } from './actions/b2';
 
 // ==========================================
@@ -24,11 +22,16 @@ import {
 // ==========================================
 const safeUploadTextToB2 = async (text: string, fileName: string, folder: string) => {
   try {
-    const formData = new FormData();
-    formData.append("file", new Blob([text], { type: 'text/csv' }), fileName);
-    formData.append("folder", folder);
+    const file = new Blob([text], { type: 'text/csv' });
+    const url = await getPresignedUploadUrl(fileName, folder, 'text/csv');
     
-    await uploadFileToB2(formData);
+    const res = await fetch(url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': 'text/csv' }
+    });
+    
+    if (!res.ok) throw new Error("Upload blocked by cloud storage.");
     return true;
   } catch (error) {
     console.error("Upload error:", error);
@@ -212,6 +215,7 @@ function useB2Files(folder: string, refreshTrigger: number) {
 // 4. MODULE COMPONENTS (The Sidebar Items)
 // ==========================================
 
+// --- TAB 1: DATA INGESTION ---
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
@@ -226,7 +230,7 @@ function DataIngestion() {
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const catSnapshots = useB2Files('snapshots/', refreshTrigger);
-  const adSnapshots = useB2Files('ads/', refreshTrigger);
+  const adSnapshots = useB2Files('marketing/', refreshTrigger);
 
   const handleCatFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -257,7 +261,12 @@ function DataIngestion() {
           raw_sheet_data: JSON.stringify(rawData)
         };
       });
-      await safeUploadTextToB2(toCSV(records), file.name, 'snapshots/');
+      const success = await safeUploadTextToB2(toCSV(records), file.name, 'snapshots/');
+      if (!success) {
+        alert("Upload failed. Please try again or contact the administrator.");
+        setIsCatUploading(false);
+        return;
+      }
     }
     setIsCatUploading(false); setCatFiles([]); setCatParsedData(null); setRefreshTrigger(prev => prev + 1);
   };
@@ -273,7 +282,14 @@ function DataIngestion() {
   const handleAdUpload = async () => {
     if (adFiles.length === 0) return;
     setIsAdUploading(true);
-    for (const file of adFiles) await safeUploadTextToB2(await file.text(), file.name, 'ads/');
+    for (const file of adFiles) {
+      const success = await safeUploadTextToB2(await file.text(), file.name, 'marketing/');
+      if (!success) {
+        alert("Upload failed. Please try again or contact the administrator.");
+        setIsAdUploading(false);
+        return;
+      }
+    }
     setIsAdUploading(false); setAdFiles([]); setAdParsedData(null); setRefreshTrigger(prev => prev + 1);
   };
 
@@ -362,7 +378,7 @@ function DataIngestion() {
                 {adSnapshots.map(fileName => (
                   <div key={fileName} className="flex justify-between items-center p-2 border border-slate-200 rounded-lg bg-slate-50">
                     <div className="flex items-center space-x-2 text-sm"><TrendingUp className="text-slate-400 w-4 h-4" /><span className="truncate max-w-[200px]">{fileName}</span></div>
-                    <Button variant="danger" className="py-1 px-2 text-xs" onClick={async () => { await deleteFileFromB2(fileName, 'ads/'); setRefreshTrigger(r=>r+1); }}>Delete</Button>
+                    <Button variant="danger" className="py-1 px-2 text-xs" onClick={async () => { await deleteFileFromB2(fileName, 'marketing/'); setRefreshTrigger(r=>r+1); }}>Delete</Button>
                   </div>
                 ))}
               </div>
@@ -637,11 +653,11 @@ function CatalogMonitor() {
 // --- TAB 3: MASTER CATALOG ---
 function MasterCatalog() {
   const [activeTab, setActiveTab] = useState('viewer');
-  const [viewMode, setViewMode] = useState('catalog'); // NEW: Toggle between 'catalog' and 'ads'
+  const [viewMode, setViewMode] = useState('catalog');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   const snapshots = useB2Files('snapshots/', refreshTrigger);
-  const adSnapshots = useB2Files('ads/', refreshTrigger);
+  const adSnapshots = useB2Files('marketing/', refreshTrigger); // Changed to marketing
   
   const [selectedCatFiles, setSelectedCatFiles] = useState<string[]>([]);
   const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
@@ -653,7 +669,6 @@ function MasterCatalog() {
   const [editableRows, setEditableRows] = useState<Record<string, string>[]>([]);
   const [isEditLoaded, setIsEditLoaded] = useState(false);
 
-  // Auto-select the most recent files
   useEffect(() => {
     if (snapshots.length > 0 && selectedCatFiles.length === 0) setSelectedCatFiles([snapshots[snapshots.length - 1]]);
     if (adSnapshots.length > 0 && selectedAdFiles.length === 0) setSelectedAdFiles([adSnapshots[adSnapshots.length - 1]]);
@@ -670,8 +685,7 @@ function MasterCatalog() {
       }
     } else {
       for (const s of selectedAdFiles) {
-        const text = await safeGetFileContent(s, 'ads/');
-        // Ads don't need unpackRecord since they are standard flat CSVs
+        const text = await safeGetFileContent(s, 'marketing/');
         combined = combined.concat(parseCSVTable(text));
       }
     }
@@ -720,7 +734,6 @@ function MasterCatalog() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 border-b pb-4">
             <h3 className="font-semibold text-slate-800">Master Data Viewer</h3>
             
-            {/* NEW: Dataset Toggle Switch */}
             <div className="flex bg-slate-100 p-1 rounded-lg">
               <button 
                 onClick={() => { setViewMode('catalog'); setViewerData([]); }}
@@ -743,7 +756,6 @@ function MasterCatalog() {
                 Files to View ({viewMode === 'catalog' ? 'Catalog' : 'Ads'})
               </label>
               
-              {/* Dynamic File List based on selected mode */}
               <div className="max-h-32 overflow-y-auto border border-slate-300 p-2 rounded-md space-y-1 bg-white">
                 {viewMode === 'catalog' ? (
                   snapshots.length === 0 ? <span className="text-xs text-slate-400 italic">No catalog files available.</span> :
@@ -777,7 +789,6 @@ function MasterCatalog() {
           {(() => {
             const filtered = searchQuery ? viewerData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) : viewerData;
             
-            // For ads, batch_name might not exist inherently, so we dynamically grab headers
             const headers = filtered.length > 0 ? Object.keys(filtered[0]) : [];
             
             return (
@@ -1093,16 +1104,13 @@ function ImageVault() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const images = useB2Files('images/', refresh);
 
-  // Album Management State
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // Batch Upload & Success Modal State
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
 
-  // Parse existing files into albums
   const albumData = useMemo(() => {
     const data: Record<string, string[]> = {};
     images.forEach(imgPath => {
@@ -1177,15 +1185,24 @@ function ImageVault() {
     const successfulUploads: {name: string, url: string}[] = [];
 
     for (const file of pendingFiles) {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("folder", folderPrefix);
-      
       try {
-        await uploadFileToB2(formData);
-        // Grab the public URL immediately after successful upload
-        const url = await getPublicB2Url(file.name, folderPrefix);
-        successfulUploads.push({ name: file.name, url });
+        const contentType = file.type || 'application/octet-stream';
+        const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
+        
+        const res = await fetch(url, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': contentType,
+          }
+        });
+        
+        if (res.ok) {
+          const publicUrl = await getPublicB2Url(file.name, folderPrefix);
+          successfulUploads.push({ name: file.name, url: publicUrl });
+        } else {
+          console.error("Failed to upload", file.name, await res.text());
+        }
       } catch (err) {
         console.error("Batch upload failed for", file.name, err);
       }
@@ -1195,9 +1212,10 @@ function ImageVault() {
     setUploading(false);
     setRefresh(r => r + 1);
     
-    // Trigger the success modal if files were uploaded
     if (successfulUploads.length > 0) {
       setUploadedBatchLinks(successfulUploads);
+    } else {
+      alert("Upload failed. Did you click the 'Unlock Uploads' button in the Data Ingestion Hub to fix your CORS?");
     }
   };
 
@@ -1236,7 +1254,6 @@ function ImageVault() {
     setRefresh(r => r + 1);
   };
 
-  // View 1: ALbum List
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -1315,13 +1332,11 @@ function ImageVault() {
     );
   }
 
-  // View 2: Inside Album
   const currentImages = albumData[activeAlbum] || [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
-      {/* 🚀 BATCH UPLOAD SUCCESS MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -1485,12 +1500,9 @@ function ImageVault() {
 function AdsAnalysis() {
   const [activeTab, setActiveTab] = useState('perf');
   const [refreshTrigger] = useState(0);
-  const adFiles = useB2Files('ads/', refreshTrigger);
+  const adFiles = useB2Files('marketing/', refreshTrigger); // Changed to marketing/
 
-  // NEW: State for selecting specific Ad Reports
   const [selectedAdFiles, setSelectedAdFiles] = useState<string[]>([]);
-
-  // Filters
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [selectedAdGroups, setSelectedAdGroups] = useState<string[]>([]);
   const [selectedMatchTypes, setSelectedMatchTypes] = useState<string[]>([]);
@@ -1510,14 +1522,12 @@ function AdsAnalysis() {
   const [rawAdRows, setRawAdRows] = useState<Record<string, string>[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // Automatically select the most recent ad report when they load
   useEffect(() => {
     if (adFiles.length > 0 && selectedAdFiles.length === 0) {
       setSelectedAdFiles([adFiles[adFiles.length - 1]]);
     }
   }, [adFiles.length]);
 
-  // Fetch only the SELECTED ad files
   useEffect(() => {
     const loadAdsData = async () => {
       if (selectedAdFiles.length === 0) {
@@ -1528,7 +1538,7 @@ function AdsAnalysis() {
       setIsDataLoading(true);
       let combined: Record<string, string>[] = [];
       for (const fileName of selectedAdFiles) {
-        const text = await safeGetFileContent(fileName, 'ads/');
+        const text = await safeGetFileContent(fileName, 'marketing/');
         combined = combined.concat(parseCSVTable(text));
       }
       setRawAdRows(combined);
@@ -1629,7 +1639,6 @@ function AdsAnalysis() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card className="p-4 space-y-4 lg:col-span-1 border-slate-200">
           
-          {/* NEW: Ad Report Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Source Reports</label>
             <div className="max-h-28 overflow-y-auto border border-slate-300 p-2 rounded-md space-y-1 bg-white">
@@ -1847,7 +1856,7 @@ function SeoIntelligence() {
 
   const [refreshTrigger] = useState(0);
   const catSnapshots = useB2Files('snapshots/', refreshTrigger);
-  const adSnapshots = useB2Files('ads/', refreshTrigger);
+  const adSnapshots = useB2Files('marketing/', refreshTrigger); // Changed to marketing/
 
   const [selectedAdFile, setSelectedAdFile] = useState('');
   const [selectedCatFile, setSelectedCatFile] = useState('');
@@ -1870,7 +1879,7 @@ function SeoIntelligence() {
 
   useEffect(() => {
     if (selectedAdFile) {
-      safeGetFileContent(selectedAdFile, 'ads/').then(text => setRawAdRows(parseCSVTable(text)));
+      safeGetFileContent(selectedAdFile, 'marketing/').then(text => setRawAdRows(parseCSVTable(text)));
     }
   }, [selectedAdFile]);
 
@@ -1897,7 +1906,6 @@ function SeoIntelligence() {
     })).sort((a, b) => b.Spend - a.Spend).slice(0, topKwLimit);
   }, [rawAdRows, ignoreAsinTerms, topKwLimit]);
 
-  // Handle Searchable ASIN Dropdowns
   const uniqueAsins = useMemo(() => {
     const set = new Set<string>();
     catalogData.forEach(r => { if(r.asin || r.ASIN) set.add(r.asin || r.ASIN); });
@@ -1913,7 +1921,6 @@ function SeoIntelligence() {
     return uniqueAsins.filter(a => a.toLowerCase().includes(auditAsinSearch.toLowerCase()));
   }, [uniqueAsins, auditAsinSearch]);
 
-  // Auto-select first visible ASIN after filtering
   useEffect(() => {
     if (filteredAsins.length > 0 && !filteredAsins.includes(selectedAuditAsin)) {
       setSelectedAuditAsin(filteredAsins[0]);
@@ -2007,7 +2014,6 @@ function SeoIntelligence() {
               <Card className="p-6">
                 <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
                   
-                  {/* Searchable ASIN Input */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
                     <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">Select ASIN to Inspect:</label>
                     <input 
@@ -2118,7 +2124,6 @@ function SeoIntelligence() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h3 className="font-semibold text-slate-800">SEO Action Plan: High-Spend Keyword Gaps</h3>
                 
-                {/* Searchable ASIN Input */}
                 <div className="flex items-center space-x-2">
                   <input 
                     type="text" 
@@ -2176,7 +2181,6 @@ function SeoIntelligence() {
 export default function Page() {
   const [activeModule, setActiveModule] = useState('ingestion');
 
-  // New Grouped Navigation Structure
   const navGroups = [
     {
       title: 'Data Management',
@@ -2203,19 +2207,9 @@ export default function Page() {
     }
   ];
 
-  // Helper function to find active label for mobile header
-  const getActiveLabel = () => {
-    for (const group of navGroups) {
-      const found = group.items.find(item => item.id === activeModule);
-      if (found) return found.label;
-    }
-    return '';
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900">
       
-      {/* Dark Sidebar Redesigned */}
       <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col shadow-xl z-10">
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center space-x-2">
