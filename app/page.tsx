@@ -6,7 +6,7 @@ import {
   UploadCloud, Database, Activity, TrendingUp, Search, 
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
-  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock
+  Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check 
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -14,7 +14,8 @@ import {
 } from 'recharts';
 
 import { 
-  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, unlockBackblazeCors
+  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, unlockBackblazeCors,
+  renameImageInB2, renameAlbumInB2 // <-- ADD THESE TWO
 } from './actions/b2';
 
 // ==========================================
@@ -1104,10 +1105,18 @@ function ImageVault() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const images = useB2Files('images/', refresh);
 
+  // Album Management State
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
+  // Editing States
+  const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
+  const [editAlbumText, setEditAlbumText] = useState('');
+  const [editingImage, setEditingImage] = useState<string | null>(null);
+  const [editImageText, setEditImageText] = useState('');
+
+  // Batch Upload & Success Modal State
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
 
@@ -1145,6 +1154,34 @@ function ImageVault() {
     setNewAlbumName('');
   };
 
+  const handleRenameAlbum = async (oldAlbumName: string) => {
+    if (!editAlbumText.trim() || editAlbumText === oldAlbumName) {
+      setEditingAlbum(null);
+      return;
+    }
+    
+    const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_');
+    
+    // If it's just an empty local shell album
+    if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
+      setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
+      setEditingAlbum(null);
+      return;
+    }
+
+    setIsDeletingAlbum(true); // Reusing loading state for UI feedback
+    const res = await renameAlbumInB2(oldAlbumName, newName);
+    setIsDeletingAlbum(false);
+    
+    if (res.success) {
+      setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
+      setEditingAlbum(null);
+      setRefresh(r => r + 1);
+    } else {
+      alert("Failed to rename album: " + res.error);
+    }
+  };
+
   const handleDeleteAlbum = async (albumName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation(); 
     
@@ -1169,6 +1206,33 @@ function ImageVault() {
     setLocalAlbums(prev => prev.filter(a => a !== albumName));
     if (activeAlbum === albumName) setActiveAlbum(null);
     setRefresh(r => r + 1);
+  };
+
+  const handleRenameImage = async (oldName: string) => {
+    if (!editImageText.trim() || editImageText === oldName) {
+      setEditingImage(null);
+      return;
+    }
+    
+    // Auto-preserve file extension
+    const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
+    let newName = editImageText.trim().replace(/[^a-zA-Z0-9-_ \.\(\)]/g, '_');
+    if (oldExt && !newName.endsWith(`.${oldExt}`)) {
+      newName += `.${oldExt}`;
+    }
+
+    const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+    
+    setUploading(true);
+    const res = await renameImageInB2(oldName, newName, folderPrefix);
+    setUploading(false);
+    
+    if (res.success) {
+      setEditingImage(null);
+      setRefresh(r => r + 1);
+    } else {
+      alert("Failed to rename image: " + res.error);
+    }
   };
 
   const handleQueueFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1254,6 +1318,7 @@ function ImageVault() {
     setRefresh(r => r + 1);
   };
 
+  // View 1: ALbum List
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -1273,7 +1338,7 @@ function ImageVault() {
                 onChange={e => setNewAlbumName(e.target.value)} 
                 className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48"
               />
-              <Button onClick={handleCreateAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+              <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
             </div>
           </div>
 
@@ -1286,17 +1351,27 @@ function ImageVault() {
                 return (
                   <Card 
                     key={album} 
-                    onClick={() => setActiveAlbum(album)} 
-                    className="cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden"
+                    onClick={() => { if(editingAlbum !== album) setActiveAlbum(album); }} 
+                    className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}
                   >
+                    {/* EDIT & DELETE BUTTONS */}
                     {album !== 'Uncategorized' && (
-                      <button 
-                        onClick={(e) => handleDeleteAlbum(album, e)}
-                        className="absolute top-2 right-2 p-1.5 bg-white/80 backdrop-blur-sm text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors z-10 shadow-sm"
-                        title="Delete Album"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }}
+                          className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full shadow-sm"
+                          title="Rename Album"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => handleDeleteAlbum(album, e)}
+                          className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full shadow-sm"
+                          title="Delete Album"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                     
                     <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
@@ -1315,8 +1390,25 @@ function ImageVault() {
                     </div>
 
                     <div className="p-4 text-center bg-white">
-                      <h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4>
-                      <p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p>
+                      {editingAlbum === album ? (
+                        <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
+                          <input 
+                            autoFocus
+                            type="text" 
+                            className="w-full text-sm border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                            value={editAlbumText} 
+                            onChange={e => setEditAlbumText(e.target.value)}
+                            onKeyDown={e => { if(e.key === 'Enter') handleRenameAlbum(album); if(e.key === 'Escape') setEditingAlbum(null); }}
+                          />
+                          <button onClick={() => handleRenameAlbum(album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-4 h-4"/></button>
+                          <button onClick={() => setEditingAlbum(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4"/></button>
+                        </div>
+                      ) : (
+                        <>
+                          <h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4>
+                          <p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p>
+                        </>
+                      )}
                     </div>
                   </Card>
                 );
@@ -1332,6 +1424,7 @@ function ImageVault() {
     );
   }
 
+  // View 2: Inside Album
   const currentImages = albumData[activeAlbum] || [];
 
   return (
@@ -1458,12 +1551,12 @@ function ImageVault() {
         </div>
         
         {currentImages.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
             {currentImages.map(imgName => {
               const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
               return (
-                <div key={imgName} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white">
-                  <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative group">
+                <div key={imgName} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
+                  <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative">
                     <img 
                       src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`} 
                       alt={imgName} 
@@ -1471,7 +1564,28 @@ function ImageVault() {
                     />
                   </div>
                   <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
-                    <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                    
+                    {/* INLINE IMAGE RENAME */}
+                    {editingImage === imgName ? (
+                      <div className="flex items-center space-x-1">
+                        <input 
+                          autoFocus
+                          type="text" 
+                          className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                          value={editImageText} 
+                          onChange={e => setEditImageText(e.target.value)}
+                          onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName); if(e.key === 'Escape') setEditingImage(null); }}
+                        />
+                        <button onClick={() => handleRenameImage(imgName)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button>
+                        <button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(imgName); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
+                        <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                        <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
+                      </div>
+                    )}
+
                     <div className="flex space-x-2 w-full">
                       <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}>
                         <Link className="w-3 h-3 mr-1.5" />

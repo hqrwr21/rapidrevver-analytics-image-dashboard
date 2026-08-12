@@ -4,7 +4,7 @@
 import { 
   S3Client, ListObjectsV2Command, 
   DeleteObjectCommand, GetObjectCommand, PutObjectCommand,
-  PutBucketCorsCommand // <-- Added this
+  PutBucketCorsCommand, CopyObjectCommand // <-- Added CopyObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -43,8 +43,8 @@ export async function unlockBackblazeCors() {
     CORSConfiguration: {
       CORSRules: [
         {
-          AllowedOrigins: ["*"], // Allows browser uploads
-          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"], // MUST allow PUT
+          AllowedOrigins: ["*"], 
+          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"], 
           AllowedHeaders: ["*"],
           ExposeHeaders: ["ETag"],
           MaxAgeSeconds: 3000,
@@ -61,6 +61,64 @@ export async function unlockBackblazeCors() {
     return { success: true };
   } catch (error: any) {
     console.error("CORS Unlock Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ==========================================
+// ✏️ NEW: RENAME LOGIC
+// ==========================================
+export async function renameImageInB2(oldName: string, newName: string, folder: string) {
+  const { client, bucket } = getS3Target(folder);
+  try {
+    // 1. Copy to new name
+    await client.send(new CopyObjectCommand({
+      Bucket: bucket,
+      CopySource: encodeURI(`${bucket}/${folder}${oldName}`),
+      Key: `${folder}${newName}`,
+    }));
+    // 2. Delete old name
+    await client.send(new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: `${folder}${oldName}`
+    }));
+    return { success: true };
+  } catch (error: any) {
+    console.error("Rename Image Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function renameAlbumInB2(oldAlbum: string, newAlbum: string) {
+  const { client, bucket } = getS3Target("images/");
+  const oldPrefix = `images/${oldAlbum}/`;
+  const newPrefix = `images/${newAlbum}/`;
+
+  try {
+    // 1. List all images in the old album
+    const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: oldPrefix });
+    const response = await client.send(command);
+    const files = response.Contents || [];
+
+    // 2. Loop through and rename each file
+    for (const file of files) {
+      if (!file.Key) continue;
+      const fileName = file.Key.replace(oldPrefix, "");
+      
+      await client.send(new CopyObjectCommand({
+        Bucket: bucket,
+        CopySource: encodeURI(`${bucket}/${file.Key}`),
+        Key: `${newPrefix}${fileName}`,
+      }));
+
+      await client.send(new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: file.Key
+      }));
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Rename Album Error:", error);
     return { success: false, error: error.message };
   }
 }
