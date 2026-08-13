@@ -163,3 +163,17 @@ export async function getPresignedUploadUrl(fileName: string, folder: string, co
   const command = new PutObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}`, ContentType: contentType });
   return getSignedUrl(client, command, { expiresIn: 900 });
 }
+
+export async function listFilesWithDetails(folder: string) {
+  try {
+    const { client, bucket } = getS3Target(folder);
+    const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: folder });
+    const response = await client.send(command);
+    return response.Contents?.map((obj) => ({
+      name: obj.Key?.replace(folder, ""),
+      date: obj.LastModified ? obj.LastModified.getTime() : 0
+    })).filter(obj => Boolean(obj.name)) || [];
+  } catch (error) {
+    return [];
+  }
+}

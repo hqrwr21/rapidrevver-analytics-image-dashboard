@@ -2,6 +2,8 @@
 
 import { logout } from './actions/auth';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import JSZip from 'jszip';
+
 import { 
   UploadCloud, Database, Activity, TrendingUp, Search, 
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
@@ -16,7 +18,7 @@ import {
 
 import { 
   listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, 
-  unlockBackblazeCors, renameImageInB2, renameAlbumInB2 
+  unlockBackblazeCors, renameImageInB2, renameAlbumInB2, listFilesWithDetails 
 } from './actions/b2';
 
 // ==========================================
@@ -203,6 +205,7 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 // ==========================================
 // 3. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
+
 function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
     <div onClick={onClick} className={`bg-white border border-slate-200 rounded-xl shadow-sm ${className}`}>
@@ -225,6 +228,14 @@ function Button({ children, onClick, variant = 'primary', className = '', disabl
 function useB2Files(folder: string, refreshTrigger: number) {
   const [files, setFiles] = useState<string[]>([]);
   useEffect(() => { listFiles(folder).then(setFiles); }, [folder, refreshTrigger]);
+  return files;
+}
+
+function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
+  const [files, setFiles] = useState<{name: string, date: number}[]>([]);
+  useEffect(() => { 
+    listFilesWithDetails(folder).then(res => setFiles(res as {name: string, date: number}[])); 
+  }, [folder, refreshTrigger]);
   return files;
 }
 
@@ -1389,18 +1400,32 @@ function ImageVault() {
   const [copied, setCopied] = useState('');
   const [copiedAll, setCopiedAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const images = useB2Files('images/', refresh);
+  
+  const imagesWithDetails = useB2FilesWithDetails('images/', refresh);
 
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // 🔍 Search States
+  // 🔍 Search & Sort States
   const [albumSearch, setAlbumSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
+  const [imageSortOrder, setImageSortOrder] = useState<'recent' | 'asc' | 'desc'>('recent');
 
-  // 🖼️ NEW: Expanded Image Lightbox State
+  // 🖼️ Expanded Image Lightbox & Selection States
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [isDownloading, setIsDownloading] = useState(false); 
+  
+  // 🖱️ Drag-to-Select States
+  const [dragMode, setDragMode] = useState<'select' | 'deselect' | null>(null);
+
+  useEffect(() => {
+    // Stop drag selection when the user releases the mouse anywhere on the screen
+    const handleMouseUp = () => setDragMode(null);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
   const [editAlbumText, setEditAlbumText] = useState('');
@@ -1411,18 +1436,18 @@ function ImageVault() {
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
 
   const albumData = useMemo(() => {
-    const data: Record<string, string[]> = {};
-    images.forEach(imgPath => {
-      const parts = imgPath.split('/');
+    const data: Record<string, {name: string, date: number}[]> = {};
+    imagesWithDetails.forEach(file => {
+      const parts = file.name.split('/');
       if (parts.length > 1) {
         const album = parts[0];
-        const file = parts.slice(1).join('/');
+        const fileName = parts.slice(1).join('/');
         if (!data[album]) data[album] = [];
-        if (file) data[album].push(file);
+        if (fileName) data[album].push({ name: fileName, date: file.date });
       } else {
         const album = 'Uncategorized';
         if (!data[album]) data[album] = [];
-        if (imgPath) data[album].push(imgPath);
+        if (file.name) data[album].push({ name: file.name, date: file.date });
       }
     });
 
@@ -1431,11 +1456,10 @@ function ImageVault() {
     });
 
     return data;
-  }, [images, localAlbums]);
+  }, [imagesWithDetails, localAlbums]);
 
   const albums = Object.keys(albumData).sort();
   
-  // 🔍 SMART ALBUM SEARCH
   const filteredAlbums = useMemo(() => {
     if (!albumSearch.trim()) return albums;
     const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
@@ -1445,23 +1469,27 @@ function ImageVault() {
     });
   }, [albums, albumSearch]);
 
-  // 🌍 SMART GLOBAL IMAGE SEARCH (Runs on the main page)
   const globalFilteredImages = useMemo(() => {
     if (!albumSearch.trim()) return [];
     const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    const results: { album: string, name: string }[] = [];
+    const results: { album: string, name: string, date: number }[] = [];
     
     Object.entries(albumData).forEach(([album, imgs]) => {
       for (const img of imgs) {
-        const searchable = img.toLowerCase().replace(/[-_.]/g, ' ');
-        const match = terms.every(term => img.toLowerCase().includes(term) || searchable.includes(term));
+        const searchable = img.name.toLowerCase().replace(/[-_.]/g, ' ');
+        const match = terms.every(term => img.name.toLowerCase().includes(term) || searchable.includes(term));
         if (match) {
-          results.push({ album, name: img });
+          results.push({ album, name: img.name, date: img.date });
         }
       }
     });
-    return results;
-  }, [albumData, albumSearch]);
+    
+    return results.sort((a, b) => {
+      if (imageSortOrder === 'recent') return b.date - a.date;
+      if (imageSortOrder === 'asc') return a.name.localeCompare(b.name);
+      return b.name.localeCompare(a.name);
+    });
+  }, [albumData, albumSearch, imageSortOrder]);
 
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim()) return;
@@ -1477,19 +1505,15 @@ function ImageVault() {
       setEditingAlbum(null);
       return;
     }
-    
     const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_');
-    
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
       return;
     }
-
     setIsDeletingAlbum(true); 
     const res = await renameAlbumInB2(oldAlbumName, newName);
     setIsDeletingAlbum(false);
-    
     if (res.success) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
@@ -1501,25 +1525,20 @@ function ImageVault() {
 
   const handleDeleteAlbum = async (albumName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation(); 
-    
     const imagesInAlbum = albumData[albumName] || [];
-    
     if (imagesInAlbum.length > 0) {
       const confirmDelete = window.confirm(`Are you sure you want to delete the album "${albumName}" AND all ${imagesInAlbum.length} images inside it? This cannot be undone.`);
       if (!confirmDelete) return;
-
       setIsDeletingAlbum(true);
       const folderPrefix = `images/${albumName}/`;
-      
       for (const img of imagesInAlbum) {
-        await deleteFileFromB2(img, folderPrefix);
+        await deleteFileFromB2(img.name, folderPrefix);
       }
       setIsDeletingAlbum(false);
     } else {
       const confirmDelete = window.confirm(`Remove empty album "${albumName}"?`);
       if (!confirmDelete) return;
     }
-
     setLocalAlbums(prev => prev.filter(a => a !== albumName));
     if (activeAlbum === albumName) setActiveAlbum(null);
     setRefresh(r => r + 1);
@@ -1530,19 +1549,15 @@ function ImageVault() {
       setEditingImage(null);
       return;
     }
-    
     const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
     let newName = editImageText.trim().replace(/[^a-zA-Z0-9-_ \.\(\)]/g, '_');
     if (oldExt && !newName.endsWith(`.${oldExt}`)) {
       newName += `.${oldExt}`;
     }
-
     const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-    
     setUploading(true);
     const res = await renameImageInB2(oldName, newName, folderPrefix);
     setUploading(false);
-    
     if (res.success) {
       setEditingImage(null);
       setRefresh(r => r + 1);
@@ -1560,43 +1575,24 @@ function ImageVault() {
   const handleBatchUpload = async () => {
     if (pendingFiles.length === 0 || !activeAlbum) return;
     setUploading(true);
-
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
     const successfulUploads: {name: string, url: string}[] = [];
-
     for (const file of pendingFiles) {
       try {
         const contentType = file.type || 'application/octet-stream';
         const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
-        
-        const res = await fetch(url, {
-          method: 'PUT',
-          body: file,
-          headers: {
-            'Content-Type': contentType,
-          }
-        });
-        
+        const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         if (res.ok) {
           const publicUrl = await getPublicB2Url(file.name, folderPrefix);
           successfulUploads.push({ name: file.name, url: publicUrl });
-        } else {
-          console.error("Failed to upload", file.name, await res.text());
         }
-      } catch (err) {
-        console.error("Batch upload failed for", file.name, err);
-      }
+      } catch (err) { console.error("Batch upload failed for", file.name, err); }
     }
-
     setPendingFiles([]);
     setUploading(false);
     setRefresh(r => r + 1);
-    
-    if (successfulUploads.length > 0) {
-      setUploadedBatchLinks(successfulUploads);
-    } else {
-      alert("Upload failed. Please check your network connection and try again.");
-    }
+    if (successfulUploads.length > 0) setUploadedBatchLinks(successfulUploads);
+    else alert("Upload failed. Please check your network connection and try again.");
   };
 
   const handleCopyLink = async (imgName: string, targetAlbum: string) => {
@@ -1606,26 +1602,18 @@ function ImageVault() {
       await navigator.clipboard.writeText(url);
       setCopied(imgName);
       setTimeout(() => setCopied(''), 2000);
-    } catch (err) {
-      console.error("Failed to copy", err);
-    }
+    } catch (err) { console.error("Failed to copy", err); }
   };
 
   const handleCopyAllLinks = async (targetAlbum: string) => {
     try {
       const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
       const imagesToCopy = albumData[targetAlbum] || [];
-      
-      const urls = await Promise.all(
-        imagesToCopy.map(imgName => getPublicB2Url(imgName, folderPrefix))
-      );
-      
+      const urls = await Promise.all(imagesToCopy.map(img => getPublicB2Url(img.name, folderPrefix)));
       await navigator.clipboard.writeText(urls.join('\n'));
       setCopiedAll(true);
       setTimeout(() => setCopiedAll(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy all links", err);
-    }
+    } catch (err) { console.error("Failed to copy all links", err); }
   };
 
   const handleDeleteImage = async (imgName: string, targetAlbum: string) => {
@@ -1634,14 +1622,76 @@ function ImageVault() {
     setRefresh(r => r + 1);
   };
 
+  const cycleSortOrder = () => {
+    if (imageSortOrder === 'recent') setImageSortOrder('asc');
+    else if (imageSortOrder === 'asc') setImageSortOrder('desc');
+    else setImageSortOrder('recent');
+  };
+
+  // 🚀 HIGH-PERFORMANCE ZIP ENGINE
+  const handleDownloadZip = async (imageKeys: string[], zipName: string) => {
+    if (imageKeys.length === 0) return;
+    setIsDownloading(true);
+
+    try {
+      const zip = new JSZip();
+
+      for (const uniqueKey of imageKeys) {
+        const parts = uniqueKey.split('/');
+        const album = parts[0];
+        const name = parts.slice(1).join('/');
+        const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+
+        const proxyUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(name)}`;
+        const res = await fetch(proxyUrl);
+        const blob = await res.blob();
+        
+        zip.file(name, blob);
+      }
+
+      // Generate the zip and trigger download
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = window.URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = zipName;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      link.remove();
+      
+    } catch (err) {
+      console.error("Zip download failed", err);
+      alert("Failed to create ZIP file. Ensure JSZip is installed correctly.");
+    }
+    
+    setIsDownloading(false);
+    setSelectedImages([]); // Clear selections after success
+  };
+
+  // 🖱️ Mouse Drag-to-Select Handlers
+  const handleMouseDown = (e: React.MouseEvent, key: string, isSelected: boolean) => {
+    // Prevent dragging if they click a specific button (like delete or zoom)
+    if ((e.target as HTMLElement).closest('button')) return;
+    
+    const newMode = isSelected ? 'deselect' : 'select';
+    setDragMode(newMode);
+    if (newMode === 'select') setSelectedImages(prev => [...prev, key]);
+    else setSelectedImages(prev => prev.filter(k => k !== key));
+  };
+
+  const handleMouseEnter = (key: string, isSelected: boolean) => {
+    if (dragMode === 'select' && !isSelected) setSelectedImages(prev => [...prev, key]);
+    else if (dragMode === 'deselect' && isSelected) setSelectedImages(prev => prev.filter(k => k !== key));
+  };
+
   // ==========================================
-  // VIEW 1: ALBUM DIRECTORY (Main Page)
+  // VIEW 1: ALBUM DIRECTORY & GLOBAL SEARCH
   // ==========================================
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
         
-        {/* 🖼️ EXPANDED IMAGE LIGHTBOX */}
         {expandedImage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
             <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -1676,7 +1726,7 @@ function ImageVault() {
                   type="text"
                   placeholder="Search albums and images globally..."
                   value={albumSearch}
-                  onChange={e => setAlbumSearch(e.target.value)}
+                  onChange={e => { setAlbumSearch(e.target.value); setSelectedImages([]); }}
                   className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                 />
               </div>
@@ -1698,13 +1748,13 @@ function ImageVault() {
             filteredAlbums.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {filteredAlbums.map(album => {
-                  const previewImage = albumData[album]?.[0];
+                  const previewImage = albumData[album]?.[0]?.name;
                   const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
 
                   return (
                     <Card 
                       key={album} 
-                      onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); } }} 
+                      onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); setSelectedImages([]); } }} 
                       className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}
                     >
                       {album !== 'Uncategorized' && (
@@ -1781,9 +1831,38 @@ function ImageVault() {
         {/* 🌍 GLOBAL IMAGE SEARCH RESULTS */}
         {albumSearch.trim() && (
           <Card className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold text-slate-800">Global Image Results</h3>
-              <span className="text-sm font-medium text-slate-500">{globalFilteredImages.length} found</span>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="flex items-center space-x-3">
+                <h3 className="text-lg font-semibold text-slate-800">Global Image Results</h3>
+                <span className="text-sm font-medium text-slate-500">{globalFilteredImages.length} found</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                {/* 🟢 BULK SELECTION ACTION BAR */}
+                {selectedImages.length > 0 ? (
+                  <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                    <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
+                    <Button variant="outline" className="bg-white text-xs py-1 px-2" onClick={() => setSelectedImages([])}>Cancel</Button>
+                    <Button className="text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" disabled={isDownloading} onClick={() => handleDownloadZip(selectedImages, 'Global_Search_Images.zip')}>
+                      <Download className="w-3 h-3 mr-1.5" /> {isDownloading ? 'Zipping...' : 'Download as ZIP'}
+                    </Button>
+                  </div>
+                ) : globalFilteredImages.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setSelectedImages(globalFilteredImages.map(img => `${img.album}/${img.name}`))} 
+                    className="bg-white text-xs py-1.5"
+                  >
+                    Select All
+                  </Button>
+                )}
+
+                {globalFilteredImages.length > 0 && (
+                  <Button variant="outline" onClick={cycleSortOrder} className="bg-white text-xs py-1.5 whitespace-nowrap">
+                    {imageSortOrder === 'recent' ? 'Sort: Recent First' : imageSortOrder === 'asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {globalFilteredImages.length > 0 ? (
@@ -1792,23 +1871,46 @@ function ImageVault() {
                   const folderPrefix = imgObj.album === 'Uncategorized' ? 'images/' : `images/${imgObj.album}/`;
                   const uniqueImgKey = `${imgObj.album}/${imgObj.name}`;
                   const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgObj.name)}`;
+                  const isSelected = selectedImages.includes(uniqueImgKey);
 
                   return (
-                    <div key={uniqueImgKey} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
-                      <div 
-                        className="h-40 bg-slate-100 flex items-center justify-center p-2 relative cursor-pointer overflow-hidden"
-                        onClick={() => setExpandedImage(imgUrl)}
-                        title="Click to view full image"
-                      >
+                    <div 
+                      key={uniqueImgKey} 
+                      onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)}
+                      onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)}
+                      className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}
+                    >
+                      <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
+                        
+                        {/* 🟢 SELECTION CHECKBOX (Visual only, div handles click) */}
+                        <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm">
+                          <input 
+                            type="checkbox"
+                            checked={isSelected}
+                            readOnly
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                          />
+                        </div>
+
+                        {/* 🔍 LIGHTBOX BUTTON */}
+                        <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} 
+                            className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm"
+                            title="Expand Image"
+                          >
+                            <ZoomIn className="w-4 h-4" />
+                          </button>
+                        </div>
+
                         <img 
                           src={imgUrl} 
                           alt={imgObj.name} 
-                          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" 
                           loading="lazy"
                         />
                       </div>
-                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
-                        
+                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                         {editingImage === uniqueImgKey ? (
                           <div className="flex items-center space-x-1">
                             <input 
@@ -1831,11 +1933,9 @@ function ImageVault() {
                             </div>
                           </div>
                         )}
-
                         <div className="flex space-x-2 w-full">
                           <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgObj.name, imgObj.album)}>
-                            <Link className="w-3 h-3 mr-1.5" />
-                            {copied === imgObj.name ? 'Copied!' : 'Copy'}
+                            <Link className="w-3 h-3 mr-1.5" /> Copy
                           </Button>
                           <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}>
                             <Trash2 className="w-3 h-3" />
@@ -1862,20 +1962,25 @@ function ImageVault() {
   // ==========================================
   const currentImages = albumData[activeAlbum] || [];
   
-  // 🔍 SMART IMAGE SEARCH
-  const filteredImages = (() => {
-    if (!imageSearch.trim()) return currentImages;
-    const terms = imageSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    return currentImages.filter(img => {
-      const searchable = img.toLowerCase().replace(/[-_.]/g, ' ');
-      return terms.every(term => img.toLowerCase().includes(term) || searchable.includes(term));
+  const sortedFilteredImages = (() => {
+    let imgs = [...currentImages];
+    if (imageSearch.trim()) {
+      const terms = imageSearch.toLowerCase().split(/\s+/).filter(Boolean);
+      imgs = imgs.filter(img => {
+        const searchable = img.name.toLowerCase().replace(/[-_.]/g, ' ');
+        return terms.every(term => img.name.toLowerCase().includes(term) || searchable.includes(term));
+      });
+    }
+    return imgs.sort((a, b) => {
+      if (imageSortOrder === 'recent') return b.date - a.date;
+      if (imageSortOrder === 'asc') return a.name.localeCompare(b.name);
+      return b.name.localeCompare(a.name);
     });
   })();
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
-      {/* 🖼️ EXPANDED IMAGE LIGHTBOX */}
       {expandedImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
           <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -1894,6 +1999,7 @@ function ImageVault() {
         </div>
       )}
 
+      {/* Batch Upload Modal... */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -1947,7 +2053,7 @@ function ImageVault() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
-          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); setSelectedImages([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
             <ArrowLeft className="w-6 h-6 text-slate-600" />
           </button>
           <div>
@@ -1956,16 +2062,29 @@ function ImageVault() {
           </div>
         </div>
 
-        {activeAlbum !== 'Uncategorized' && (
-          <Button 
-            variant="danger" 
-            onClick={() => handleDeleteAlbum(activeAlbum)}
-            disabled={isDeletingAlbum}
-          >
-            <Trash2 className="w-4 h-4 mr-2" /> 
-            {isDeletingAlbum ? 'Deleting...' : 'Delete Entire Album'}
-          </Button>
-        )}
+        <div className="flex items-center space-x-3">
+          {currentImages.length > 0 && (
+            <Button 
+              variant="outline" 
+              onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)}
+              disabled={isDownloading}
+              className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}
+            </Button>
+          )}
+
+          {activeAlbum !== 'Uncategorized' && (
+            <Button 
+              variant="danger" 
+              onClick={() => handleDeleteAlbum(activeAlbum)}
+              disabled={isDeletingAlbum}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> 
+              {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="p-6">
@@ -2005,25 +2124,53 @@ function ImageVault() {
 
       <Card className="p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3>
+          <div className="flex items-center space-x-3">
+            <h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3>
+            <span className="text-sm font-medium text-slate-500">{sortedFilteredImages.length} items</span>
+          </div>
           
-          <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {/* 🔍 Image Search Bar */}
             {currentImages.length > 0 && (
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-64 mr-2">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Find image..."
                   value={imageSearch}
-                  onChange={e => setImageSearch(e.target.value)}
+                  onChange={e => { setImageSearch(e.target.value); setSelectedImages([]); }}
                   className="border border-slate-300 p-1.5 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                 />
               </div>
             )}
 
+            {/* 🟢 BULK SELECTION ACTION BAR */}
+            {selectedImages.length > 0 ? (
+              <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
+                <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
+                <Button variant="outline" className="bg-white text-xs py-1 px-2" onClick={() => setSelectedImages([])}>Cancel</Button>
+                <Button className="text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" disabled={isDownloading} onClick={() => handleDownloadZip(selectedImages, `${activeAlbum}_Selection.zip`)}>
+                  <Download className="w-3 h-3 mr-1.5" /> {isDownloading ? 'Zipping...' : 'Download as ZIP'}
+                </Button>
+              </div>
+            ) : sortedFilteredImages.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={() => setSelectedImages(sortedFilteredImages.map(img => `${activeAlbum}/${img.name}`))} 
+                className="bg-white text-xs py-1.5"
+              >
+                Select All
+              </Button>
+            )}
+
             {currentImages.length > 0 && (
-              <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)}>
+              <Button variant="outline" onClick={cycleSortOrder} className="bg-white text-xs py-1.5 whitespace-nowrap">
+                {imageSortOrder === 'recent' ? 'Sort: Recent First' : imageSortOrder === 'asc' ? 'Sort: A-Z' : 'Sort: Z-A'}
+              </Button>
+            )}
+
+            {currentImages.length > 0 && (
+              <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)} className="bg-white text-xs py-1.5 whitespace-nowrap">
                 <Link className="w-4 h-4 mr-2" />
                 {copiedAll ? 'Copied All!' : 'Copy All Links'}
               </Button>
@@ -2032,28 +2179,53 @@ function ImageVault() {
         </div>
         
         {currentImages.length > 0 ? (
-          filteredImages.length > 0 ? (
+          sortedFilteredImages.length > 0 ? (
             <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-              {filteredImages.map(imgName => {
+              {sortedFilteredImages.map(imgObj => {
+                const imgName = imgObj.name;
                 const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
                 const uniqueImgKey = `${activeAlbum}/${imgName}`;
                 const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`;
+                const isSelected = selectedImages.includes(uniqueImgKey);
 
                 return (
-                  <div key={uniqueImgKey} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
-                    <div 
-                      className="h-40 bg-slate-100 flex items-center justify-center p-2 relative cursor-pointer overflow-hidden"
-                      onClick={() => setExpandedImage(imgUrl)}
-                      title="Click to view full image"
-                    >
+                  <div 
+                    key={uniqueImgKey} 
+                    onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)}
+                    onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)}
+                    className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}
+                  >
+                    <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
+                      
+                      {/* 🟢 SELECTION CHECKBOX (Visual only) */}
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm">
+                        <input 
+                          type="checkbox"
+                          checked={isSelected}
+                          readOnly
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                        />
+                      </div>
+
+                      {/* 🔍 LIGHTBOX BUTTON */}
+                      <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} 
+                          className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm"
+                          title="Expand Image"
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </button>
+                      </div>
+
                       <img 
                         src={imgUrl} 
                         alt={imgName} 
-                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" 
                         loading="lazy"
                       />
                     </div>
-                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
+                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                       
                       {editingImage === uniqueImgKey ? (
                         <div className="flex items-center space-x-1">
@@ -2077,8 +2249,7 @@ function ImageVault() {
 
                       <div className="flex space-x-2 w-full">
                         <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}>
-                          <Link className="w-3 h-3 mr-1.5" />
-                          {copied === imgName ? 'Copied!' : 'Copy'}
+                          <Link className="w-3 h-3 mr-1.5" /> Copy
                         </Button>
                         <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}>
                           <Trash2 className="w-3 h-3" />
