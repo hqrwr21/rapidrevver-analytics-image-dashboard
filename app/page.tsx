@@ -1381,6 +1381,7 @@ function GlobalDeltaView() {
   );
 }
 
+// --- TAB 6: IMAGE VAULT ---
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
   const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
@@ -1393,6 +1394,13 @@ function ImageVault() {
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
+
+  // 🔍 Search States
+  const [albumSearch, setAlbumSearch] = useState('');
+  const [imageSearch, setImageSearch] = useState('');
+
+  // 🖼️ NEW: Expanded Image Lightbox State
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
   const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
   const [editAlbumText, setEditAlbumText] = useState('');
@@ -1426,6 +1434,34 @@ function ImageVault() {
   }, [images, localAlbums]);
 
   const albums = Object.keys(albumData).sort();
+  
+  // 🔍 SMART ALBUM SEARCH
+  const filteredAlbums = useMemo(() => {
+    if (!albumSearch.trim()) return albums;
+    const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    return albums.filter(a => {
+      const searchable = a.toLowerCase().replace(/[-_]/g, ' ');
+      return terms.every(term => a.toLowerCase().includes(term) || searchable.includes(term));
+    });
+  }, [albums, albumSearch]);
+
+  // 🌍 SMART GLOBAL IMAGE SEARCH (Runs on the main page)
+  const globalFilteredImages = useMemo(() => {
+    if (!albumSearch.trim()) return [];
+    const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    const results: { album: string, name: string }[] = [];
+    
+    Object.entries(albumData).forEach(([album, imgs]) => {
+      for (const img of imgs) {
+        const searchable = img.toLowerCase().replace(/[-_.]/g, ' ');
+        const match = terms.every(term => img.toLowerCase().includes(term) || searchable.includes(term));
+        if (match) {
+          results.push({ album, name: img });
+        }
+      }
+    });
+    return results;
+  }, [albumData, albumSearch]);
 
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim()) return;
@@ -1489,7 +1525,7 @@ function ImageVault() {
     setRefresh(r => r + 1);
   };
 
-  const handleRenameImage = async (oldName: string) => {
+  const handleRenameImage = async (oldName: string, targetAlbum: string) => {
     if (!editImageText.trim() || editImageText === oldName) {
       setEditingImage(null);
       return;
@@ -1501,7 +1537,7 @@ function ImageVault() {
       newName += `.${oldExt}`;
     }
 
-    const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
     
     setUploading(true);
     const res = await renameImageInB2(oldName, newName, folderPrefix);
@@ -1563,9 +1599,9 @@ function ImageVault() {
     }
   };
 
-  const handleCopyLink = async (imgName: string, album: string) => {
+  const handleCopyLink = async (imgName: string, targetAlbum: string) => {
     try {
-      const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
       const url = await getPublicB2Url(imgName, folderPrefix);
       await navigator.clipboard.writeText(url);
       setCopied(imgName);
@@ -1575,10 +1611,10 @@ function ImageVault() {
     }
   };
 
-  const handleCopyAllLinks = async (album: string) => {
+  const handleCopyAllLinks = async (targetAlbum: string) => {
     try {
-      const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
-      const imagesToCopy = albumData[album] || [];
+      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
+      const imagesToCopy = albumData[targetAlbum] || [];
       
       const urls = await Promise.all(
         imagesToCopy.map(imgName => getPublicB2Url(imgName, folderPrefix))
@@ -1592,121 +1628,272 @@ function ImageVault() {
     }
   };
 
-  const handleDeleteImage = async (imgName: string, album: string) => {
-    const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+  const handleDeleteImage = async (imgName: string, targetAlbum: string) => {
+    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
     await deleteFileFromB2(imgName, folderPrefix);
     setRefresh(r => r + 1);
   };
 
+  // ==========================================
+  // VIEW 1: ALBUM DIRECTORY (Main Page)
+  // ==========================================
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
+        
+        {/* 🖼️ EXPANDED IMAGE LIGHTBOX */}
+        {expandedImage && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
+            <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+              <button 
+                onClick={() => setExpandedImage(null)} 
+                className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <img 
+                src={expandedImage} 
+                alt="Expanded View" 
+                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+              />
+            </div>
+          </div>
+        )}
+
         <div>
           <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
-          <p className="text-slate-500 mt-1">Organize and batch upload product images into albums.</p>
+          <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
         <Card className="p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
             <h3 className="text-lg font-semibold text-slate-800">Your Albums</h3>
-            <div className="flex items-center space-x-2 w-full sm:w-auto">
-              <input 
-                type="text" 
-                placeholder="New Album Name" 
-                value={newAlbumName} 
-                onChange={e => setNewAlbumName(e.target.value)} 
-                className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48"
-              />
-              <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+            
+            <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full lg:w-auto">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search albums and images globally..."
+                  value={albumSearch}
+                  onChange={e => setAlbumSearch(e.target.value)}
+                  className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <input 
+                  type="text" 
+                  placeholder="New Album Name" 
+                  value={newAlbumName} 
+                  onChange={e => setNewAlbumName(e.target.value)} 
+                  className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48"
+                />
+                <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+              </div>
             </div>
           </div>
 
           {albums.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {albums.map(album => {
-                const previewImage = albumData[album]?.[0];
-                const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+            filteredAlbums.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredAlbums.map(album => {
+                  const previewImage = albumData[album]?.[0];
+                  const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
 
-                return (
-                  <Card 
-                    key={album} 
-                    onClick={() => { if(editingAlbum !== album) setActiveAlbum(album); }} 
-                    className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}
-                  >
-                    {album !== 'Uncategorized' && (
-                      <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }}
-                          className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full shadow-sm"
-                          title="Rename Album"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => handleDeleteAlbum(album, e)}
-                          className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full shadow-sm"
-                          title="Delete Album"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                    
-                    <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
-                      {previewImage ? (
-                        <>
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-0 pointer-events-none" />
-                          <img 
-                            src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(previewImage)}`} 
-                            alt={`Preview of ${album}`}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                        </>
-                      ) : (
-                        <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />
-                      )}
-                    </div>
-
-                    <div className="p-4 text-center bg-white">
-                      {editingAlbum === album ? (
-                        <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
-                          <input 
-                            autoFocus
-                            type="text" 
-                            className="w-full text-sm border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
-                            value={editAlbumText} 
-                            onChange={e => setEditAlbumText(e.target.value)}
-                            onKeyDown={e => { if(e.key === 'Enter') handleRenameAlbum(album); if(e.key === 'Escape') setEditingAlbum(null); }}
-                          />
-                          <button onClick={() => handleRenameAlbum(album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-4 h-4"/></button>
-                          <button onClick={() => setEditingAlbum(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4"/></button>
+                  return (
+                    <Card 
+                      key={album} 
+                      onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); } }} 
+                      className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      {album !== 'Uncategorized' && (
+                        <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }}
+                            className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full shadow-sm"
+                            title="Rename Album"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => handleDeleteAlbum(album, e)}
+                            className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full shadow-sm"
+                            title="Delete Album"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      ) : (
-                        <>
-                          <h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4>
-                          <p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p>
-                        </>
                       )}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+                      
+                      <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
+                        {previewImage ? (
+                          <>
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-0 pointer-events-none" />
+                            <img 
+                              src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(previewImage)}`} 
+                              alt={`Preview of ${album}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            />
+                          </>
+                        ) : (
+                          <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />
+                        )}
+                      </div>
+
+                      <div className="p-4 text-center bg-white">
+                        {editingAlbum === album ? (
+                          <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
+                            <input 
+                              autoFocus
+                              type="text" 
+                              className="w-full text-sm border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                              value={editAlbumText} 
+                              onChange={e => setEditAlbumText(e.target.value)}
+                              onKeyDown={e => { if(e.key === 'Enter') handleRenameAlbum(album); if(e.key === 'Escape') setEditingAlbum(null); }}
+                            />
+                            <button onClick={() => handleRenameAlbum(album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-4 h-4"/></button>
+                            <button onClick={() => setEditingAlbum(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4"/></button>
+                          </div>
+                        ) : (
+                          <>
+                            <h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4>
+                            <p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p>
+                          </>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+                No albums match "{albumSearch}".
+              </div>
+            )
           ) : (
             <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg">
               No albums yet. Create one above to get started.
             </div>
           )}
         </Card>
+
+        {/* 🌍 GLOBAL IMAGE SEARCH RESULTS */}
+        {albumSearch.trim() && (
+          <Card className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-slate-800">Global Image Results</h3>
+              <span className="text-sm font-medium text-slate-500">{globalFilteredImages.length} found</span>
+            </div>
+
+            {globalFilteredImages.length > 0 ? (
+              <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {globalFilteredImages.map(imgObj => {
+                  const folderPrefix = imgObj.album === 'Uncategorized' ? 'images/' : `images/${imgObj.album}/`;
+                  const uniqueImgKey = `${imgObj.album}/${imgObj.name}`;
+                  const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgObj.name)}`;
+
+                  return (
+                    <div key={uniqueImgKey} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
+                      <div 
+                        className="h-40 bg-slate-100 flex items-center justify-center p-2 relative cursor-pointer overflow-hidden"
+                        onClick={() => setExpandedImage(imgUrl)}
+                        title="Click to view full image"
+                      >
+                        <img 
+                          src={imgUrl} 
+                          alt={imgObj.name} 
+                          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
+                        
+                        {editingImage === uniqueImgKey ? (
+                          <div className="flex items-center space-x-1">
+                            <input 
+                              autoFocus
+                              type="text" 
+                              className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                              value={editImageText} 
+                              onChange={e => setEditImageText(e.target.value)}
+                              onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }}
+                            />
+                            <button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button>
+                            <button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgObj.name.includes('.') ? imgObj.name.substring(0, imgObj.name.lastIndexOf('.')) : imgObj.name); }}>
+                            <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p>
+                              <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex space-x-2 w-full">
+                          <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgObj.name, imgObj.album)}>
+                            <Link className="w-3 h-3 mr-1.5" />
+                            {copied === imgObj.name ? 'Copied!' : 'Copy'}
+                          </Button>
+                          <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+                No images contain "{albumSearch}".
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     );
   }
 
+  // ==========================================
+  // VIEW 2: INSIDE SPECIFIC ALBUM
+  // ==========================================
   const currentImages = albumData[activeAlbum] || [];
+  
+  // 🔍 SMART IMAGE SEARCH
+  const filteredImages = (() => {
+    if (!imageSearch.trim()) return currentImages;
+    const terms = imageSearch.toLowerCase().split(/\s+/).filter(Boolean);
+    return currentImages.filter(img => {
+      const searchable = img.toLowerCase().replace(/[-_.]/g, ' ');
+      return terms.every(term => img.toLowerCase().includes(term) || searchable.includes(term));
+    });
+  })();
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
+      {/* 🖼️ EXPANDED IMAGE LIGHTBOX */}
+      {expandedImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
+          <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setExpandedImage(null)} 
+              className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img 
+              src={expandedImage} 
+              alt="Expanded View" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+            />
+          </div>
+        </div>
+      )}
+
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -1760,7 +1947,7 @@ function ImageVault() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
-          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
             <ArrowLeft className="w-6 h-6 text-slate-600" />
           </button>
           <div>
@@ -1817,65 +2004,96 @@ function ImageVault() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3>
-          {currentImages.length > 0 && (
-            <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)}>
-              <Link className="w-4 h-4 mr-2" />
-              {copiedAll ? 'Copied All!' : 'Copy All Links'}
-            </Button>
-          )}
+          
+          <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+            {/* 🔍 Image Search Bar */}
+            {currentImages.length > 0 && (
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Find image..."
+                  value={imageSearch}
+                  onChange={e => setImageSearch(e.target.value)}
+                  className="border border-slate-300 p-1.5 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                />
+              </div>
+            )}
+
+            {currentImages.length > 0 && (
+              <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)}>
+                <Link className="w-4 h-4 mr-2" />
+                {copiedAll ? 'Copied All!' : 'Copy All Links'}
+              </Button>
+            )}
+          </div>
         </div>
         
         {currentImages.length > 0 ? (
-          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-            {currentImages.map(imgName => {
-              const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
-              return (
-                <div key={imgName} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
-                  <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative">
-                    <img 
-                      src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`} 
-                      alt={imgName} 
-                      className="max-h-full max-w-full object-contain" 
-                    />
-                  </div>
-                  <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
-                    
-                    {editingImage === imgName ? (
-                      <div className="flex items-center space-x-1">
-                        <input 
-                          autoFocus
-                          type="text" 
-                          className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
-                          value={editImageText} 
-                          onChange={e => setEditImageText(e.target.value)}
-                          onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName); if(e.key === 'Escape') setEditingImage(null); }}
-                        />
-                        <button onClick={() => handleRenameImage(imgName)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button>
-                        <button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(imgName); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
-                        <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
-                        <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
-                      </div>
-                    )}
+          filteredImages.length > 0 ? (
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+              {filteredImages.map(imgName => {
+                const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+                const uniqueImgKey = `${activeAlbum}/${imgName}`;
+                const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`;
 
-                    <div className="flex space-x-2 w-full">
-                      <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}>
-                        <Link className="w-3 h-3 mr-1.5" />
-                        {copied === imgName ? 'Copied!' : 'Copy Link'}
-                      </Button>
-                      <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
+                return (
+                  <div key={uniqueImgKey} className="border border-slate-200 rounded-lg overflow-hidden flex flex-col bg-white group">
+                    <div 
+                      className="h-40 bg-slate-100 flex items-center justify-center p-2 relative cursor-pointer overflow-hidden"
+                      onClick={() => setExpandedImage(imgUrl)}
+                      title="Click to view full image"
+                    >
+                      <img 
+                        src={imgUrl} 
+                        alt={imgName} 
+                        className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between">
+                      
+                      {editingImage === uniqueImgKey ? (
+                        <div className="flex items-center space-x-1">
+                          <input 
+                            autoFocus
+                            type="text" 
+                            className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                            value={editImageText} 
+                            onChange={e => setEditImageText(e.target.value)}
+                            onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum); if(e.key === 'Escape') setEditingImage(null); }}
+                          />
+                          <button onClick={() => handleRenameImage(imgName, activeAlbum)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button>
+                          <button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
+                          <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                          <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
+                        </div>
+                      )}
+
+                      <div className="flex space-x-2 w-full">
+                        <Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}>
+                          <Link className="w-3 h-3 mr-1.5" />
+                          {copied === imgName ? 'Copied!' : 'Copy'}
+                        </Button>
+                        <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
+              No images match the search "{imageSearch}".
+            </div>
+          )
         ) : (
           <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
             Album is empty. Queue and upload files above.
