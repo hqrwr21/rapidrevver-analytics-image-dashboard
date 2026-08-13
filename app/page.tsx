@@ -406,7 +406,7 @@ function DataIngestion() {
   );
 }
 
-// --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
+/// --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
 const MASTERLIST_SCHEMA = [
   {
     group: "Shared Data", color: "bg-slate-800", text: "text-white",
@@ -448,17 +448,26 @@ const MASTERLIST_SCHEMA = [
   }
 ];
 
-const flattenedSchemaCols = MASTERLIST_SCHEMA.flatMap(g => g.subgroups.flatMap(sg => sg.cols));
-
-// Pre-calculate exact global column indices to prevent duplicate column name bugs!
-let globalRunningIndex = 0;
-const SCHEMA_WITH_INDICES = MASTERLIST_SCHEMA.map(g => ({
+const __headerCounts: Record<string, number> = {};
+const SCHEMA_WITH_KEYS = MASTERLIST_SCHEMA.map(g => ({
   ...g,
   subgroups: g.subgroups.map(sg => ({
     ...sg,
-    colsWithIndex: sg.cols.map(c => ({ name: c, absIndex: globalRunningIndex++ }))
+    colsWithKey: sg.cols.map(c => {
+      const baseName = c.trim();
+      let key = baseName;
+      if (__headerCounts[baseName]) {
+        key = `${baseName}_${__headerCounts[baseName]}`;
+        __headerCounts[baseName]++;
+      } else {
+        __headerCounts[baseName] = 1;
+      }
+      return { name: baseName, dataKey: key };
+    })
   }))
 }));
+
+const flattenedSchemaCols = SCHEMA_WITH_KEYS.flatMap(g => g.subgroups.flatMap(sg => sg.colsWithKey));
 
 function MasterlistWorkspace() {
   const [data, setData] = useState<any[]>([]);
@@ -500,8 +509,6 @@ function MasterlistWorkspace() {
   const filteredData = searchQuery 
     ? data.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
     : data;
-    
-  const headers = data.length > 0 ? Object.keys(data[0]) : [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -514,7 +521,7 @@ function MasterlistWorkspace() {
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-slate-200 rounded-md flex items-center justify-center"><List className="w-6 h-6 text-slate-400" /></div>
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct[headers[0]] || 'Product Details'}</h3>
+                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct['Part No'] || selectedProduct['ASIN'] || 'Product Details'}</h3>
                   <p className="text-xs text-slate-500">Full Catalog Profile</p>
                 </div>
               </div>
@@ -524,26 +531,29 @@ function MasterlistWorkspace() {
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6">
-              {SCHEMA_WITH_INDICES.map(group => (
+              {SCHEMA_WITH_KEYS.map(group => (
                 <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
                   <h4 className={`text-xs font-bold p-2 uppercase tracking-wider ${group.color} ${group.text}`}>{group.group}</h4>
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50">
-                    {group.subgroups.flatMap(sg => sg.colsWithIndex).map((colObj) => {
-                      
-                      const actualHeaderKey = headers[colObj.absIndex];
-                      if (!actualHeaderKey) return null;
-                      
-                      const value = selectedProduct[actualHeaderKey];
-                      if (!value) return null;
+                    
+                    {group.subgroups.flatMap(sg => sg.colsWithKey).map((colObj) => {
+                      const value = selectedProduct[colObj.dataKey];
+                      if (!value) return null; // Hide empty rows cleanly
 
-                      const isImage = actualHeaderKey.toLowerCase().includes('image') && String(value).startsWith('http');
+                      const isImage = colObj.name.toLowerCase().includes('image') && String(value).startsWith('http');
 
                       return (
-                        <div key={colObj.absIndex} className="flex flex-col border-b border-slate-200 pb-1">
+                        <div key={colObj.dataKey} className="flex flex-col border-b border-slate-200 pb-1">
                           <span className="text-[10px] font-bold text-slate-400 uppercase">{colObj.name}</span>
+                          {/* 🖼️ RENDER REAL IMAGES IN THE MODAL */}
                           {isImage ? (
-                            <a href={value as string} target="_blank" rel="noreferrer" className="text-blue-500 text-xs hover:underline flex items-center">
-                              <Link className="w-3 h-3 mr-1" /> View Media
+                            <a href={value as string} target="_blank" rel="noreferrer" className="block mt-1.5 hover:opacity-80 transition-opacity" title="Click to open full size">
+                              <img 
+                                src={value as string} 
+                                alt={colObj.name} 
+                                className="h-20 w-auto rounded-md border border-slate-200 shadow-sm object-contain bg-white"
+                                loading="lazy"
+                              />
                             </a>
                           ) : (
                             <span className="text-xs text-slate-800 break-words font-medium">{value as string}</span>
@@ -608,23 +618,23 @@ function MasterlistWorkspace() {
                 {/* TIER 1: TOP LEVEL GROUPS */}
                 <tr>
                   <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-0 z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
-                  {MASTERLIST_SCHEMA.map(g => {
-                    const totalCols = g.subgroups.reduce((acc, sg) => acc + sg.cols.length, 0);
+                  {SCHEMA_WITH_KEYS.map(g => {
+                    const totalCols = g.subgroups.reduce((acc, sg) => acc + sg.colsWithKey.length, 0);
                     return <th key={g.group} colSpan={totalCols} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
                   })}
                 </tr>
                 
                 {/* TIER 2: SUB GROUPS */}
                 <tr>
-                  {MASTERLIST_SCHEMA.flatMap((g, gIndex) => g.subgroups.map((sg, sgIndex) => (
-                    <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={sg.cols.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
+                  {SCHEMA_WITH_KEYS.flatMap((g, gIndex) => g.subgroups.map((sg, sgIndex) => (
+                    <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={sg.colsWithKey.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
                   )))}
                 </tr>
 
                 {/* TIER 3: ACTUAL COLUMN NAMES */}
                 <tr>
-                  {flattenedSchemaCols.map((col, i) => (
-                    <th key={i} className="p-2 text-[10px] font-semibold border-r border-b border-slate-300 bg-white truncate max-w-[150px]" title={col}>{col}</th>
+                  {flattenedSchemaCols.map((colObj, i) => (
+                    <th key={colObj.dataKey} className="p-2 text-[10px] font-semibold border-r border-b border-slate-300 bg-white truncate max-w-[150px]" title={colObj.name}>{colObj.name}</th>
                   ))}
                 </tr>
               </thead>
@@ -637,16 +647,13 @@ function MasterlistWorkspace() {
                       </Button>
                     </td>
                     
-                    {flattenedSchemaCols.map((colName, colIndex) => {
-                      const actualHeaderKey = headers[colIndex];
-                      if (!actualHeaderKey) return <td key={colIndex} className="p-2 border-r border-slate-100"></td>;
-
-                      const val = String(row[actualHeaderKey] || '');
-                      const isImage = actualHeaderKey.toLowerCase().includes('image') && val.startsWith('http');
-                      const isStatusActive = actualHeaderKey.toLowerCase() === 'status' && val.toLowerCase() === 'active';
+                    {flattenedSchemaCols.map((colObj, colIndex) => {
+                      const val = String(row[colObj.dataKey] || '');
+                      const isImage = colObj.name.toLowerCase().includes('image') && val.startsWith('http');
+                      const isStatusActive = colObj.name.toLowerCase() === 'status' && val.toLowerCase() === 'active';
 
                       return (
-                        <td key={colIndex} className="p-2 truncate max-w-[150px] border-r border-slate-100 text-[11px]" title={val}>
+                        <td key={colObj.dataKey} className="p-2 truncate max-w-[150px] border-r border-slate-100 text-[11px]" title={val}>
                           {isImage ? (
                             <img src={val} alt="thumb" className="w-8 h-8 object-cover rounded border border-slate-200" loading="lazy" />
                           ) : isStatusActive ? (
@@ -672,6 +679,7 @@ function MasterlistWorkspace() {
     </div>
   );
 }
+
 function CatalogMonitor() {
   const [activeTab, setActiveTab] = useState('analysis');
   const [loading, setLoading] = useState(false);
