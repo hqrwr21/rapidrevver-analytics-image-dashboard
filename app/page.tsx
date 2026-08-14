@@ -419,7 +419,7 @@ function DataIngestion() {
 
 // --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
 
-// 🚀 1. DEFINE THE SCHEMAS FOR EACH CATEGORY
+// 1. DEFINE THE SCHEMAS FOR EACH CATEGORY
 const CATEGORY_SCHEMAS: Record<string, any[]> = {
   wheel_skins: [
     {
@@ -479,7 +479,7 @@ const CATEGORY_SCHEMAS: Record<string, any[]> = {
   grille_inserts: [] // Falls back to standard below if empty
 };
 
-// 🚀 2. DEFINE THE MASTERLIST CATEGORIES TABS
+// 2. DEFINE THE MASTERLIST CATEGORIES TABS
 const PRODUCT_CATEGORIES = [
   { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
   { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
@@ -498,7 +498,7 @@ function MasterlistWorkspace() {
 
   const activeCatObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory)!;
 
-  // 🚀 3. DYNAMICALLY GENERATE THE SCHEMA & KEYS FOR THE ACTIVE TAB
+  // 3. DYNAMICALLY GENERATE THE SCHEMA & KEYS FOR THE ACTIVE TAB
   const { schemaWithKeys, flattenedSchemaCols } = useMemo(() => {
     // Use the specific schema, or fall back to wheel_skins if missing (e.g., Grille Inserts)
     const rawSchema = CATEGORY_SCHEMAS[activeCategory]?.length > 0 
@@ -1475,21 +1475,24 @@ function ImageVault() {
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // Search & Sort States
+  // 🔍 Search & Sort States
   const [albumSearch, setAlbumSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
   const [imageSortOrder, setImageSortOrder] = useState<'recent' | 'asc' | 'desc'>('recent');
 
-  // Expanded Image Lightbox & Selection States
+  // 🖼️ Expanded Image Lightbox & Selection States
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false); 
   
-  // Drag-to-Select States
+  // 🖱️ Drag-to-Select States
   const [dragMode, setDragMode] = useState<'select' | 'deselect' | null>(null);
 
+  // 📊 NEW: Upload Progress States
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatusText, setUploadStatusText] = useState('');
+
   useEffect(() => {
-    // Stop drag selection when the user releases the mouse anywhere on the screen
     const handleMouseUp = () => setDragMode(null);
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
@@ -1640,12 +1643,34 @@ function ImageVault() {
     setPendingFiles(prev => [...prev, ...files]);
   };
 
+  // ☁️ SMART BATCH UPLOAD WITH PROGRESS CALCULATION
   const handleBatchUpload = async () => {
     if (pendingFiles.length === 0 || !activeAlbum) return;
+    
     setUploading(true);
+    setUploadProgress(0);
+    
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
     const successfulUploads: {name: string, url: string}[] = [];
-    for (const file of pendingFiles) {
+    const totalFiles = pendingFiles.length;
+
+    for (let i = 0; i < totalFiles; i++) {
+      const file = pendingFiles[i];
+      
+      // Update UI Text & Base Progress
+      setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${file.name}`);
+      const baseProgress = (i / totalFiles) * 100;
+      setUploadProgress(baseProgress);
+      
+      // Simulate micro-progress within the file upload for visual smoothness
+      const interval = setInterval(() => {
+        setUploadProgress(prev => {
+          const maxForThisFile = ((i + 1) / totalFiles) * 100 - 2;
+          if (prev >= maxForThisFile) return prev;
+          return prev + 2;
+        });
+      }, 150);
+
       try {
         const contentType = file.type || 'application/octet-stream';
         const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
@@ -1654,13 +1679,29 @@ function ImageVault() {
           const publicUrl = await getPublicB2Url(file.name, folderPrefix);
           successfulUploads.push({ name: file.name, url: publicUrl });
         }
-      } catch (err) { console.error("Batch upload failed for", file.name, err); }
+      } catch (err) { 
+        console.error("Batch upload failed for", file.name, err); 
+      }
+      
+      clearInterval(interval);
     }
-    setPendingFiles([]);
-    setUploading(false);
-    setRefresh(r => r + 1);
-    if (successfulUploads.length > 0) setUploadedBatchLinks(successfulUploads);
-    else alert("Upload failed. Please check your network connection and try again.");
+
+    setUploadProgress(100);
+    setUploadStatusText('Finalizing batch...');
+
+    // Wait half a second so the user sees the 100% complete state
+    setTimeout(() => {
+      setPendingFiles([]);
+      setUploading(false);
+      setUploadProgress(0);
+      setRefresh(r => r + 1);
+      
+      if (successfulUploads.length > 0) {
+        setUploadedBatchLinks(successfulUploads);
+      } else {
+        alert("Upload failed. Please check your network connection and try again.");
+      }
+    }, 600);
   };
 
   const handleCopyLink = async (imgName: string, targetAlbum: string) => {
@@ -1696,7 +1737,6 @@ function ImageVault() {
     else setImageSortOrder('recent');
   };
 
-  // HIGH-PERFORMANCE ZIP ENGINE
   const handleDownloadZip = async (imageKeys: string[], zipName: string) => {
     if (imageKeys.length === 0) return;
     setIsDownloading(true);
@@ -1717,7 +1757,6 @@ function ImageVault() {
         zip.file(name, blob);
       }
 
-      // Generate the zip and trigger download
       const content = await zip.generateAsync({ type: 'blob' });
       const url = window.URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -1734,14 +1773,11 @@ function ImageVault() {
     }
     
     setIsDownloading(false);
-    setSelectedImages([]); // Clear selections after success
+    setSelectedImages([]); 
   };
 
-  // Mouse Drag-to-Select Handlers
   const handleMouseDown = (e: React.MouseEvent, key: string, isSelected: boolean) => {
-    // Prevent dragging if they click a specific button (like delete or zoom)
     if ((e.target as HTMLElement).closest('button')) return;
-    
     const newMode = isSelected ? 'deselect' : 'select';
     setDragMode(newMode);
     if (newMode === 'select') setSelectedImages(prev => [...prev, key]);
@@ -1779,7 +1815,7 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Image Vault</h2>
+          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
@@ -1896,7 +1932,6 @@ function ImageVault() {
           )}
         </Card>
 
-        {/* GLOBAL IMAGE SEARCH RESULTS */}
         {albumSearch.trim() && (
           <Card className="p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1906,7 +1941,6 @@ function ImageVault() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {/* BULK SELECTION ACTION BAR */}
                 {selectedImages.length > 0 ? (
                   <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                     <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
@@ -1949,18 +1983,10 @@ function ImageVault() {
                       className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}
                     >
                       <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                        
-                        {/* 🟢 SELECTION CHECKBOX (Visual only, div handles click) */}
                         <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm">
-                          <input 
-                            type="checkbox"
-                            checked={isSelected}
-                            readOnly
-                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
-                          />
+                          <input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" />
                         </div>
 
-                        {/* 🔍 LIGHTBOX BUTTON */}
                         <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} 
@@ -1971,22 +1997,14 @@ function ImageVault() {
                           </button>
                         </div>
 
-                        <img 
-                          src={imgUrl} 
-                          alt={imgObj.name} 
-                          className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" 
-                          loading="lazy"
-                        />
+                        <img src={imgUrl} alt={imgObj.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                       </div>
                       <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                         {editingImage === uniqueImgKey ? (
                           <div className="flex items-center space-x-1">
                             <input 
-                              autoFocus
-                              type="text" 
-                              className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
-                              value={editImageText} 
-                              onChange={e => setEditImageText(e.target.value)}
+                              autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" 
+                              value={editImageText} onChange={e => setEditImageText(e.target.value)}
                               onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }}
                             />
                             <button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button>
@@ -2083,7 +2101,6 @@ function ImageVault() {
             
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
               <p className="text-sm text-slate-600">Successfully processed {uploadedBatchLinks.length} images. You can copy the permanent links below.</p>
-              
               <div className="space-y-2">
                 {uploadedBatchLinks.map((linkObj, i) => (
                   <div key={i} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm group">
@@ -2096,8 +2113,7 @@ function ImageVault() {
                       setCopied(linkObj.name);
                       setTimeout(() => setCopied(''), 2000);
                     }}>
-                      <Link className="w-3 h-3 mr-2" />
-                      {copied === linkObj.name ? 'Copied!' : 'Copy'}
+                      <Link className="w-3 h-3 mr-2" /> {copied === linkObj.name ? 'Copied!' : 'Copy'}
                     </Button>
                   </div>
                 ))}
@@ -2111,8 +2127,7 @@ function ImageVault() {
                 setCopiedAll(true);
                 setTimeout(() => setCopiedAll(false), 2000);
               }}>
-                <Link className="w-4 h-4 mr-2" />
-                {copiedAll ? 'Copied All Links!' : 'Copy All Links in Batch'}
+                <Link className="w-4 h-4 mr-2" /> {copiedAll ? 'Copied All Links!' : 'Copy All Links in Batch'}
               </Button>
             </div>
           </div>
@@ -2157,19 +2172,43 @@ function ImageVault() {
 
       <Card className="p-6">
         <h3 className="font-semibold text-slate-800 mb-4">Stage Files for Upload</h3>
-        <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors" onClick={() => fileInputRef.current?.click()}>
-          <UploadCloud className="w-10 h-10 text-blue-500 mb-3" />
-          <p className="text-slate-700 font-medium">Click to select files</p>
-          <p className="text-xs text-slate-500 mt-1">Files will be queued below before uploading</p>
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/>
+        
+        {/* 🚀 SMOOTH UPLOAD PROGRESS UI */}
+        <div className={`border-2 border-dashed border-slate-300 rounded-xl transition-colors ${uploading ? 'bg-slate-50' : 'hover:bg-slate-100 cursor-pointer'}`}>
+          {uploading ? (
+            <div className="p-8 flex flex-col items-center justify-center min-h-[160px]">
+              <UploadCloud className="w-10 h-10 mb-4 text-blue-600 animate-bounce" />
+              <p className="font-semibold text-slate-700 text-sm mb-1">{uploadStatusText}</p>
+              
+              <div className="w-full max-w-md mt-4 animate-in slide-in-from-bottom-2 fade-in">
+                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                  <div 
+                    className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.min(uploadProgress, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  <span>{uploadProgress >= 100 ? 'Complete' : 'Uploading...'}</span>
+                  <span>{Math.round(Math.min(uploadProgress, 100))}%</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 flex flex-col items-center justify-center" onClick={() => fileInputRef.current?.click()}>
+              <UploadCloud className="w-10 h-10 text-blue-500 mb-3" />
+              <p className="text-slate-700 font-medium">Click to select files</p>
+              <p className="text-xs text-slate-500 mt-1">Files will be queued below before uploading</p>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/>
+            </div>
+          )}
         </div>
 
-        {pendingFiles.length > 0 && (
-          <div className="mt-6 space-y-4">
+        {!uploading && pendingFiles.length > 0 && (
+          <div className="mt-6 space-y-4 animate-in fade-in">
             <div className="flex justify-between items-center border-b pb-2">
               <h4 className="text-sm font-semibold text-slate-700">{pendingFiles.length} files queued</h4>
-              <Button onClick={handleBatchUpload} disabled={uploading}>
-                {uploading ? 'Uploading...' : `Upload Batch`}
+              <Button onClick={handleBatchUpload}>
+                Upload Batch
               </Button>
             </div>
             <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
@@ -2212,7 +2251,7 @@ function ImageVault() {
               </div>
             )}
 
-            {/* BULK SELECTION ACTION BAR */}
+            {/* 🟢 BULK SELECTION ACTION BAR */}
             {selectedImages.length > 0 ? (
               <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                 <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
@@ -2265,7 +2304,7 @@ function ImageVault() {
                   >
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
                       
-                      {/* SELECTION CHECKBOX (Visual only) */}
+                      {/* 🟢 SELECTION CHECKBOX (Visual only) */}
                       <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm">
                         <input 
                           type="checkbox"
@@ -2275,7 +2314,7 @@ function ImageVault() {
                         />
                       </div>
 
-                      {/* LIGHTBOX BUTTON */}
+                      {/* 🔍 LIGHTBOX BUTTON */}
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} 

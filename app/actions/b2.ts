@@ -129,9 +129,28 @@ export async function renameAlbumInB2(oldAlbum: string, newAlbum: string) {
 export async function listFiles(folder: string) {
   try {
     const { client, bucket } = getS3Target(folder);
-    const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: folder });
-    const response = await client.send(command);
-    return response.Contents?.map((obj) => obj.Key?.replace(folder, "")).filter(Boolean) as string[] || [];
+    let isTruncated = true;
+    let continuationToken: string | undefined = undefined;
+    const allFiles: string[] = [];
+
+    // Loop through the database until ALL files are fetched, bypassing the 1000 limit
+    while (isTruncated) {
+      const command = new ListObjectsV2Command({ 
+        Bucket: bucket, 
+        Prefix: folder,
+        ContinuationToken: continuationToken
+      });
+      const response = await client.send(command);
+      
+      if (response.Contents) {
+        const keys = response.Contents.map((obj) => obj.Key?.replace(folder, "")).filter(Boolean) as string[];
+        allFiles.push(...keys);
+      }
+      
+      isTruncated = response.IsTruncated ?? false;
+      continuationToken = response.NextContinuationToken;
+    }
+    return allFiles;
   } catch (error) {
     return [];
   }
@@ -167,12 +186,32 @@ export async function getPresignedUploadUrl(fileName: string, folder: string, co
 export async function listFilesWithDetails(folder: string) {
   try {
     const { client, bucket } = getS3Target(folder);
-    const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: folder });
-    const response = await client.send(command);
-    return response.Contents?.map((obj) => ({
-      name: obj.Key?.replace(folder, ""),
-      date: obj.LastModified ? obj.LastModified.getTime() : 0
-    })).filter(obj => Boolean(obj.name)) || [];
+    let isTruncated = true;
+    let continuationToken: string | undefined = undefined;
+    const allFiles: {name: string, date: number}[] = [];
+
+    // Loop through the database until ALL files are fetched
+    while (isTruncated) {
+      const command = new ListObjectsV2Command({ 
+        Bucket: bucket, 
+        Prefix: folder,
+        ContinuationToken: continuationToken
+      });
+      const response = await client.send(command);
+      
+      if (response.Contents) {
+        const files = response.Contents.map((obj) => ({
+          name: obj.Key?.replace(folder, ""),
+          date: obj.LastModified ? obj.LastModified.getTime() : 0
+        })).filter(obj => Boolean(obj.name));
+        allFiles.push(...files);
+      }
+      
+      isTruncated = response.IsTruncated ?? false;
+      continuationToken = response.NextContinuationToken;
+    }
+    
+    return allFiles;
   } catch (error) {
     return [];
   }
