@@ -90,7 +90,7 @@ const parseCSVTable = (text: string): Record<string, string>[] => {
 
   if (rows.length < 2) return []; 
   
-  // 🔥 UPGRADED: Intelligent Duplicate Column Handler
+  //UPGRADED: Intelligent Duplicate Column Handler
   const rawHeaders = rows[0].map(h => h.trim() || 'Empty');
   const headers: string[] = [];
   const headerCounts: Record<string, number> = {};
@@ -417,87 +417,134 @@ function DataIngestion() {
   );
 }
 
-/// --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
-const MASTERLIST_SCHEMA = [
-  {
-    group: "Shared Data", color: "bg-slate-800", text: "text-white",
-    subgroups: [
-      { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part TYpe Jobber", "Status", "Fitment Info", "FTP QTY", "Jobber Price"] },
-      { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Cost Price", "Cost Price = 8%", "Product Type", "item Type Keyword", "Hollander/Part Code", "Material", "Number of Items", "Color/ Finish", "Size for Bullet", "Installation Type", "Pattern"] },
-      { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "Material", "Number of Items", "Exterior Finish", "Color", "Size for Attribute", "Size Digit", "Model Brand Part Fits", "OEM Equivalent Part Number", "Retention Attrbute", "Pattern", "Included Components"] },
-      { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Generic Keywords", "Item Length", "Item Package Length", "Package Length Unit", "Item Package Width", "Package Width Unit", "Item Package Height", "Package Height Unit", "Package Weight"] },
-      { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Package Weight Unit", "Fitment Type"] }
-    ]
-  },
-  {
-    group: "OxGord", color: "bg-blue-600", text: "text-white",
-    subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
-  },
-  {
-    group: "Fuel Rider", color: "bg-red-600", text: "text-white",
-    subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
-  },
-  {
-    group: "MUA", color: "bg-purple-600", text: "text-white",
-    subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }]
-  },
-  {
-    group: "Walmart", color: "bg-sky-500", text: "text-white",
-    subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }]
-  },
-  {
-    group: "eBay", color: "bg-emerald-600", text: "text-white",
-    subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }]
-  },
-  {
-    group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white",
-    subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }]
-  },
-  {
-    group: "Ride And Rover", color: "bg-indigo-600", text: "text-white",
-    subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }]
-  }
+// --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
+
+// 🚀 1. DEFINE THE SCHEMAS FOR EACH CATEGORY
+const CATEGORY_SCHEMAS: Record<string, any[]> = {
+  wheel_skins: [
+    {
+      group: "Shared Data", color: "bg-slate-800", text: "text-white",
+      subgroups: [
+        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part TYpe Jobber", "Status", "Fitment Info", "FTP QTY", "Jobber Price"] },
+        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Cost Price", "Cost Price = 8%", "Product Type", "item Type Keyword", "Hollander/Part Code", "Material", "Number of Items", "Color/ Finish", "Size for Bullet", "Installation Type", "Pattern"] },
+        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "Material", "Number of Items", "Exterior Finish", "Color", "Size for Attribute", "Size Digit", "Model Brand Part Fits", "OEM Equivalent Part Number", "Retention Attrbute", "Pattern", "Included Components"] },
+        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Generic Keywords", "Item Length", "Item Package Length", "Package Length Unit", "Item Package Width", "Package Width Unit", "Item Package Height", "Package Height Unit", "Package Weight"] },
+        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Package Weight Unit", "Fitment Type"] }
+      ]
+    },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
+    { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
+  ],
+  hubcaps: [
+    {
+      group: "Shared Data", color: "bg-slate-800", text: "text-white",
+      subgroups: [
+        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
+        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] },
+        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["material", "number of items", "exterior finish", "color", "size for attribute", "size digit", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] },
+        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] },
+        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }
+      ]
+    },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
+  ],
+  center_caps: [
+    {
+      group: "Shared Data", color: "bg-slate-800", text: "text-white",
+      subgroups: [
+        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
+        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["cost price", "Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] },
+        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["compatible with", "material", "number of items", "exterior finish", "color", "size for attribute", "finish code", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] },
+        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] },
+        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type"] }
+      ]
+    },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
+  ],
+  grille_inserts: [] // Falls back to standard below if empty
+};
+
+// 🚀 2. DEFINE THE MASTERLIST CATEGORIES TABS
+const PRODUCT_CATEGORIES = [
+  { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
+  { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
+  { id: 'center_caps', label: 'Center Caps', file: 'masterlist_center_caps.csv' },
+  { id: 'grille_inserts', label: 'Grille Inserts', file: 'masterlist_grille_inserts.csv' }
 ];
 
-const __headerCounts: Record<string, number> = {};
-const SCHEMA_WITH_KEYS = MASTERLIST_SCHEMA.map(g => ({
-  ...g,
-  subgroups: g.subgroups.map(sg => ({
-    ...sg,
-    colsWithKey: sg.cols.map(c => {
-      const baseName = c.trim();
-      let key = baseName;
-      if (__headerCounts[baseName]) {
-        key = `${baseName}_${__headerCounts[baseName]}`;
-        __headerCounts[baseName]++;
-      } else {
-        __headerCounts[baseName] = 1;
-      }
-      return { name: baseName, dataKey: key };
-    })
-  }))
-}));
-
-const flattenedSchemaCols = SCHEMA_WITH_KEYS.flatMap(g => g.subgroups.flatMap(sg => sg.colsWithKey));
-
 function MasterlistWorkspace() {
-  const [data, setData] = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState(PRODUCT_CATEGORIES[0].id);
+  const [dataCache, setDataCache] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Record<string, string> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  const activeCatObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory)!;
+
+  // 🚀 3. DYNAMICALLY GENERATE THE SCHEMA & KEYS FOR THE ACTIVE TAB
+  const { schemaWithKeys, flattenedSchemaCols } = useMemo(() => {
+    // Use the specific schema, or fall back to wheel_skins if missing (e.g., Grille Inserts)
+    const rawSchema = CATEGORY_SCHEMAS[activeCategory]?.length > 0 
+      ? CATEGORY_SCHEMAS[activeCategory] 
+      : CATEGORY_SCHEMAS['wheel_skins'];
+
+    const headerCounts: Record<string, number> = {};
+    const schemaWithKeys = rawSchema.map(g => ({
+      ...g,
+      subgroups: g.subgroups.map((sg: any) => ({
+        ...sg,
+        colsWithKey: sg.cols.map((c: string) => {
+          const baseName = c.trim();
+          let key = baseName;
+          if (headerCounts[baseName]) {
+            key = `${baseName}_${headerCounts[baseName]}`;
+            headerCounts[baseName]++;
+          } else {
+            headerCounts[baseName] = 1;
+          }
+          return { name: baseName, dataKey: key };
+        })
+      }))
+    }));
+
+    const flattenedSchemaCols = schemaWithKeys.flatMap(g => g.subgroups.flatMap((sg: any) => sg.colsWithKey));
+
+    return { schemaWithKeys, flattenedSchemaCols };
+  }, [activeCategory]);
+
+  // Load Database from Cloud
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const text = await safeGetFileContent('unified_masterlist.csv', 'masterlists/');
-      if (text) setData(parseCSVTable(text));
+      const text = await safeGetFileContent(activeCatObj.file, 'masterlists/');
+      if (text) {
+        setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
+      } else {
+        setDataCache(prev => ({ ...prev, [activeCategory]: [] }));
+      }
       setLoading(false);
     };
     loadData();
-  }, [refreshTrigger]);
+  }, [activeCategory, refreshTrigger]);
 
+  // Handle CSV Uploads
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -505,10 +552,10 @@ function MasterlistWorkspace() {
     setLoading(true);
     const text = await files[0].text();
 
-    const success = await safeUploadTextToB2(text, 'unified_masterlist.csv', 'masterlists/');
+    const success = await safeUploadTextToB2(text, activeCatObj.file, 'masterlists/');
     if (success) {
-      setData(parseCSVTable(text));
-      alert(`✅ Unified Masterlist successfully updated!`);
+      setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
+      alert(`✅ ${activeCatObj.label} Masterlist successfully updated!`);
       setRefreshTrigger(prev => prev + 1);
     } else {
       alert("❌ Upload failed. Please try again.");
@@ -517,9 +564,13 @@ function MasterlistWorkspace() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const currentData = dataCache[activeCategory] || [];
+
   const filteredData = searchQuery 
-    ? data.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
-    : data;
+    ? currentData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
+    : currentData;
+
+  const headers = currentData.length > 0 ? Object.keys(currentData[0]) : [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
@@ -532,8 +583,8 @@ function MasterlistWorkspace() {
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-slate-200 rounded-md flex items-center justify-center"><List className="w-6 h-6 text-slate-400" /></div>
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct['Part No'] || selectedProduct['ASIN'] || 'Product Details'}</h3>
-                  <p className="text-xs text-slate-500">Full Catalog Profile</p>
+                  <h3 className="font-bold text-lg text-slate-900">{selectedProduct['Part No'] || selectedProduct['Part no'] || selectedProduct['ASIN'] || 'Product Details'}</h3>
+                  <p className="text-xs text-slate-500">{activeCatObj.label} Catalog Profile</p>
                 </div>
               </div>
               <button onClick={() => setSelectedProduct(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
@@ -542,12 +593,12 @@ function MasterlistWorkspace() {
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6">
-              {SCHEMA_WITH_KEYS.map(group => (
+              {schemaWithKeys.map(group => (
                 <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
                   <h4 className={`text-xs font-bold p-2 uppercase tracking-wider ${group.color} ${group.text}`}>{group.group}</h4>
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50">
                     
-                    {group.subgroups.flatMap(sg => sg.colsWithKey).map((colObj) => {
+                    {group.subgroups.flatMap((sg: any) => sg.colsWithKey).map((colObj: any) => {
                       const value = selectedProduct[colObj.dataKey];
                       if (!value) return null; // Hide empty rows cleanly
 
@@ -586,40 +637,57 @@ function MasterlistWorkspace() {
 
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Unified Masterlist</h2>
-          <p className="text-slate-500 mt-1">Your entire 90+ column product database. ⚠️ Ensure the top 2 Excel rows are deleted before uploading!</p>
+          <h2 className="text-2xl font-bold text-slate-900">Unified Masterlists</h2>
+          <p className="text-slate-500 mt-1">Manage your 90+ column product databases by category.</p>
         </div>
         
         <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
         <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
           <UploadCloud className="w-4 h-4 mr-2" />
-          Overwrite / Upload Master CSV
+          Overwrite / Upload {activeCatObj.label} CSV
         </Button>
+      </div>
+
+      {/* 🟢 CATEGORY TABS */}
+      <div className="flex border-b border-slate-200 overflow-x-auto mt-2">
+        {PRODUCT_CATEGORIES.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
+            className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap flex items-center transition-colors ${
+              activeCategory === cat.id 
+              ? 'border-blue-600 text-blue-700 font-bold bg-blue-50/50' 
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            {cat.label} Masterlist
+          </button>
+        ))}
       </div>
 
       <Card className="p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-          <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} active records</span>
+          <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} active records in <b>{activeCatObj.label}</b></span>
           <div className="flex items-center space-x-2 w-full sm:w-auto">
             <input 
               type="text" 
-              placeholder={`Search entire database...`} 
+              placeholder={`Search ${activeCatObj.label}...`} 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)} 
               className="w-full sm:w-80 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
             />
-            <Button variant="outline" onClick={() => downloadCSV(filteredData, `unified_masterlist.csv`)}>
+            <Button variant="outline" onClick={() => downloadCSV(filteredData, `masterlist_${activeCategory}.csv`)}>
               <Download className="w-4 h-4 mr-2"/> Export
             </Button>
           </div>
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-500 animate-pulse">Loading super-grid from cloud...</div>
-        ) : data.length === 0 ? (
+          <div className="p-12 text-center text-slate-500 animate-pulse">Loading {activeCatObj.label} super-grid from cloud...</div>
+        ) : currentData.length === 0 ? (
           <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
             <List className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-            <p>No master database loaded.</p>
+            <p>No database loaded for {activeCatObj.label}.</p>
             <p className="text-sm mt-2">Click the Upload button above to import your flat CSV file.</p>
           </div>
         ) : (
@@ -629,22 +697,22 @@ function MasterlistWorkspace() {
                 {/* TIER 1: TOP LEVEL GROUPS */}
                 <tr>
                   <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-0 z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
-                  {SCHEMA_WITH_KEYS.map(g => {
-                    const totalCols = g.subgroups.reduce((acc, sg) => acc + sg.colsWithKey.length, 0);
+                  {schemaWithKeys.map(g => {
+                    const totalCols = g.subgroups.reduce((acc: number, sg: any) => acc + sg.colsWithKey.length, 0);
                     return <th key={g.group} colSpan={totalCols} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
                   })}
                 </tr>
                 
                 {/* TIER 2: SUB GROUPS */}
                 <tr>
-                  {SCHEMA_WITH_KEYS.flatMap((g, gIndex) => g.subgroups.map((sg, sgIndex) => (
+                  {schemaWithKeys.flatMap((g, gIndex) => g.subgroups.map((sg: any, sgIndex: number) => (
                     <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={sg.colsWithKey.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
                   )))}
                 </tr>
 
                 {/* TIER 3: ACTUAL COLUMN NAMES */}
                 <tr>
-                  {flattenedSchemaCols.map((colObj, i) => (
+                  {flattenedSchemaCols.map((colObj: any, i: number) => (
                     <th key={colObj.dataKey} className="p-2 text-[10px] font-semibold border-r border-b border-slate-300 bg-white truncate max-w-[150px]" title={colObj.name}>{colObj.name}</th>
                   ))}
                 </tr>
@@ -658,7 +726,7 @@ function MasterlistWorkspace() {
                       </Button>
                     </td>
                     
-                    {flattenedSchemaCols.map((colObj, colIndex) => {
+                    {flattenedSchemaCols.map((colObj: any, colIndex: number) => {
                       const val = String(row[colObj.dataKey] || '');
                       const isImage = colObj.name.toLowerCase().includes('image') && val.startsWith('http');
                       const isStatusActive = colObj.name.toLowerCase() === 'status' && val.toLowerCase() === 'active';
@@ -1407,17 +1475,17 @@ function ImageVault() {
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // 🔍 Search & Sort States
+  // Search & Sort States
   const [albumSearch, setAlbumSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
   const [imageSortOrder, setImageSortOrder] = useState<'recent' | 'asc' | 'desc'>('recent');
 
-  // 🖼️ Expanded Image Lightbox & Selection States
+  // Expanded Image Lightbox & Selection States
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false); 
   
-  // 🖱️ Drag-to-Select States
+  // Drag-to-Select States
   const [dragMode, setDragMode] = useState<'select' | 'deselect' | null>(null);
 
   useEffect(() => {
@@ -1628,7 +1696,7 @@ function ImageVault() {
     else setImageSortOrder('recent');
   };
 
-  // 🚀 HIGH-PERFORMANCE ZIP ENGINE
+  // HIGH-PERFORMANCE ZIP ENGINE
   const handleDownloadZip = async (imageKeys: string[], zipName: string) => {
     if (imageKeys.length === 0) return;
     setIsDownloading(true);
@@ -1669,7 +1737,7 @@ function ImageVault() {
     setSelectedImages([]); // Clear selections after success
   };
 
-  // 🖱️ Mouse Drag-to-Select Handlers
+  // Mouse Drag-to-Select Handlers
   const handleMouseDown = (e: React.MouseEvent, key: string, isSelected: boolean) => {
     // Prevent dragging if they click a specific button (like delete or zoom)
     if ((e.target as HTMLElement).closest('button')) return;
@@ -1711,7 +1779,7 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Image Vault</h2>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
@@ -1828,7 +1896,7 @@ function ImageVault() {
           )}
         </Card>
 
-        {/* 🌍 GLOBAL IMAGE SEARCH RESULTS */}
+        {/* GLOBAL IMAGE SEARCH RESULTS */}
         {albumSearch.trim() && (
           <Card className="p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -1838,7 +1906,7 @@ function ImageVault() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {/* 🟢 BULK SELECTION ACTION BAR */}
+                {/* BULK SELECTION ACTION BAR */}
                 {selectedImages.length > 0 ? (
                   <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                     <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
@@ -2144,7 +2212,7 @@ function ImageVault() {
               </div>
             )}
 
-            {/* 🟢 BULK SELECTION ACTION BAR */}
+            {/* BULK SELECTION ACTION BAR */}
             {selectedImages.length > 0 ? (
               <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
                 <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
@@ -2197,7 +2265,7 @@ function ImageVault() {
                   >
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
                       
-                      {/* 🟢 SELECTION CHECKBOX (Visual only) */}
+                      {/* SELECTION CHECKBOX (Visual only) */}
                       <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm">
                         <input 
                           type="checkbox"
@@ -2207,7 +2275,7 @@ function ImageVault() {
                         />
                       </div>
 
-                      {/* 🔍 LIGHTBOX BUTTON */}
+                      {/* LIGHTBOX BUTTON */}
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} 
@@ -2992,9 +3060,9 @@ export default function Page() {
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center space-x-2">
             <LayoutDashboard className="w-6 h-6 text-blue-400" />
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">RapidRevver</span>
+            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Rapid Revver</span>
           </div>
-          <p className="text-slate-400 text-xs mt-1">Analytics Next.js Core</p>
+          <p className="text-slate-400 text-xs mt-1">Analytics</p>
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto">
@@ -3036,14 +3104,14 @@ export default function Page() {
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-800 p-2 rounded-lg">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Robust CSV Engine Active</span>
+            <span>CSV Engine Active</span>
           </div>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
-          <span className="text-xl font-bold text-slate-900">RapidRevver</span>
+          <span className="text-xl font-bold text-slate-900">Rapid Revver</span>
           <select value={activeModule} onChange={(e) => setActiveModule(e.target.value)} className="border-slate-300 p-2 border rounded-md text-sm">
             {navGroups.flatMap(g => g.items).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
