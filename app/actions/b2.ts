@@ -4,7 +4,7 @@
 import { 
   S3Client, ListObjectsV2Command, 
   DeleteObjectCommand, GetObjectCommand, PutObjectCommand,
-  PutBucketCorsCommand, CopyObjectCommand // <-- Added CopyObjectCommand
+  PutBucketCorsCommand, CopyObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -66,18 +66,16 @@ export async function unlockBackblazeCors() {
 }
 
 // ==========================================
-// ✏️ NEW: RENAME LOGIC
+// ✏️ RENAME LOGIC
 // ==========================================
 export async function renameImageInB2(oldName: string, newName: string, folder: string) {
   const { client, bucket } = getS3Target(folder);
   try {
-    // 1. Copy to new name
     await client.send(new CopyObjectCommand({
       Bucket: bucket,
       CopySource: encodeURI(`${bucket}/${folder}${oldName}`),
       Key: `${folder}${newName}`,
     }));
-    // 2. Delete old name
     await client.send(new DeleteObjectCommand({
       Bucket: bucket,
       Key: `${folder}${oldName}`
@@ -95,12 +93,10 @@ export async function renameAlbumInB2(oldAlbum: string, newAlbum: string) {
   const newPrefix = `images/${newAlbum}/`;
 
   try {
-    // 1. List all images in the old album
     const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: oldPrefix });
-    const response = await client.send(command);
+    const response: any = await client.send(command);
     const files = response.Contents || [];
 
-    // 2. Loop through and rename each file
     for (const file of files) {
       if (!file.Key) continue;
       const fileName = file.Key.replace(oldPrefix, "");
@@ -126,24 +122,24 @@ export async function renameAlbumInB2(oldAlbum: string, newAlbum: string) {
 // ==========================================
 // STANDARD B2 FUNCTIONS
 // ==========================================
-export async function listFiles(folder: string) {
+
+export async function listFiles(folder: string): Promise<string[]> {
   try {
     const { client, bucket } = getS3Target(folder);
     let isTruncated = true;
     let continuationToken: string | undefined = undefined;
     const allFiles: string[] = [];
 
-    // Loop through the database until ALL files are fetched, bypassing the 1000 limit
     while (isTruncated) {
       const command = new ListObjectsV2Command({ 
         Bucket: bucket, 
         Prefix: folder,
         ContinuationToken: continuationToken
       });
-      const response = await client.send(command);
+      const response: any = await client.send(command);
       
       if (response.Contents) {
-        const keys = response.Contents.map((obj) => obj.Key?.replace(folder, "")).filter(Boolean) as string[];
+        const keys = response.Contents.map((obj: any) => obj.Key?.replace(folder, "")).filter(Boolean) as string[];
         allFiles.push(...keys);
       }
       
@@ -183,27 +179,26 @@ export async function getPresignedUploadUrl(fileName: string, folder: string, co
   return getSignedUrl(client, command, { expiresIn: 900 });
 }
 
-export async function listFilesWithDetails(folder: string) {
+export async function listFilesWithDetails(folder: string): Promise<{name: string, date: number}[]> {
   try {
     const { client, bucket } = getS3Target(folder);
     let isTruncated = true;
     let continuationToken: string | undefined = undefined;
     const allFiles: {name: string, date: number}[] = [];
 
-    // Loop through the database until ALL files are fetched
     while (isTruncated) {
       const command = new ListObjectsV2Command({ 
         Bucket: bucket, 
         Prefix: folder,
         ContinuationToken: continuationToken
       });
-      const response = await client.send(command);
+      const response: any = await client.send(command);
       
       if (response.Contents) {
-        const files = response.Contents.map((obj) => ({
+        const files = response.Contents.map((obj: any) => ({
           name: obj.Key?.replace(folder, ""),
-          date: obj.LastModified ? obj.LastModified.getTime() : 0
-        })).filter(obj => Boolean(obj.name));
+          date: obj.LastModified ? new Date(obj.LastModified).getTime() : 0
+        })).filter((obj: any) => Boolean(obj.name));
         allFiles.push(...files);
       }
       
