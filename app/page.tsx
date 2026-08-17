@@ -205,7 +205,6 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 // ==========================================
 // 3. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
-
 function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
     <div onClick={onClick} className={`bg-white border border-slate-200 rounded-xl shadow-sm ${className}`}>
@@ -242,7 +241,6 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
 // ==========================================
 // 4. MODULE COMPONENTS
 // ==========================================
-
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
@@ -419,7 +417,6 @@ function DataIngestion() {
 
 // --- TAB 9: UNIFIED MASTERLIST WORKSPACE ---
 
-// 1. DEFINE THE SCHEMAS FOR EACH CATEGORY
 const CATEGORY_SCHEMAS: Record<string, any[]> = {
   wheel_skins: [
     {
@@ -475,12 +472,32 @@ const CATEGORY_SCHEMAS: Record<string, any[]> = {
     { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
     { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
     { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
-  ],
-  grille_inserts: [] // Falls back to standard below if empty
+  ]
 };
 
-// 2. DEFINE THE MASTERLIST CATEGORIES TABS
+// 🚀 GLOBAL SUPERSET SCHEMA (Combines all possible columns for the Global view)
+CATEGORY_SCHEMAS['global'] = [
+  {
+    group: "Shared Data", color: "bg-slate-800", text: "text-white",
+    subgroups: [
+      { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part no", "Part TYpe Jobber", "part type jobber", "Status", "status", "Fitment Info", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
+      { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product Type", "Product type", "item Type Keyword", "item type keyword", "Hollander/Part Code", "Material", "material", "Number of Items", "number of items", "Color/ Finish", "color/finish", "Size for Bullet", "size for bullet", "Installation Type", "installation type", "Pattern", "pattern"] },
+      { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "compatible with", "Exterior Finish", "exterior finish", "Color", "color", "Size for Attribute", "size for attribute", "Size Digit", "size digit", "finish code", "Model Brand Part Fits", "model brand part fits", "OEM Equivalent Part Number", "Retention Attrbute", "retention attribute", "Included Components", "included components", "Generic Keywords", "generic keywords"] },
+      { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Item Length", "item length", "Item Package Length", "item package length", "Package Length Unit", "package length unit", "Item Package Width", "item package width", "Package Width Unit", "package width unit", "Item Package Height", "item package height", "Package Height Unit", "package height unit", "Package Weight", "package weight", "Package Weight Unit", "package weight unit"] },
+      { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Fitment Type", "fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }
+    ]
+  },
+  { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "Main Listing SKU", "SKU", "MPN"] }] },
+  { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+  { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
+  { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
+];
+
 const PRODUCT_CATEGORIES = [
+  { id: 'global', label: '🌍 Global Master Sheet', file: 'N/A' }, // NEW GLOBAL TAB
   { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
   { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
   { id: 'center_caps', label: 'Center Caps', file: 'masterlist_center_caps.csv' },
@@ -490,92 +507,149 @@ const PRODUCT_CATEGORIES = [
 function MasterlistWorkspace() {
   const [activeCategory, setActiveCategory] = useState(PRODUCT_CATEGORIES[0].id);
   const [dataCache, setDataCache] = useState<Record<string, any[]>>({});
-  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Record<string, string> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // 🎯 NEW: DATA EXTRACTION STATES (Rows & Columns)
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
+  const [showColumnFilter, setShowColumnFilter] = useState(false);
+
   const activeCatObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory)!;
 
-  // 3. DYNAMICALLY GENERATE THE SCHEMA & KEYS FOR THE ACTIVE TAB
+  // Dynamically generate the schema & keys for the active tab
   const { schemaWithKeys, flattenedSchemaCols } = useMemo(() => {
-    // Use the specific schema, or fall back to wheel_skins if missing (e.g., Grille Inserts)
     const rawSchema = CATEGORY_SCHEMAS[activeCategory]?.length > 0 
       ? CATEGORY_SCHEMAS[activeCategory] 
       : CATEGORY_SCHEMAS['wheel_skins'];
 
     const headerCounts: Record<string, number> = {};
-    const schemaWithKeys = rawSchema.map(g => ({
+    const keysSchema = rawSchema.map(g => ({
       ...g,
       subgroups: g.subgroups.map((sg: any) => ({
         ...sg,
         colsWithKey: sg.cols.map((c: string) => {
           const baseName = c.trim();
           let key = baseName;
-          if (headerCounts[baseName]) {
-            key = `${baseName}_${headerCounts[baseName]}`;
-            headerCounts[baseName]++;
-          } else {
-            headerCounts[baseName] = 1;
-          }
+          if (headerCounts[baseName]) { key = `${baseName}_${headerCounts[baseName]}`; headerCounts[baseName]++; } 
+          else { headerCounts[baseName] = 1; }
           return { name: baseName, dataKey: key };
         })
       }))
     }));
 
-    const flattenedSchemaCols = schemaWithKeys.flatMap(g => g.subgroups.flatMap((sg: any) => sg.colsWithKey));
-
-    return { schemaWithKeys, flattenedSchemaCols };
+    const flatCols = keysSchema.flatMap(g => g.subgroups.flatMap((sg: any) => sg.colsWithKey));
+    return { schemaWithKeys: keysSchema, flattenedSchemaCols: flatCols };
   }, [activeCategory]);
+
+  // Reset Row/Column selection when changing tabs
+  useEffect(() => {
+    setSelectedRows(new Set());
+    setVisibleColumns(new Set(flattenedSchemaCols.map((c: any) => c.dataKey)));
+    setShowColumnFilter(false);
+  }, [activeCategory, flattenedSchemaCols]);
 
   // Load Database from Cloud
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      const text = await safeGetFileContent(activeCatObj.file, 'masterlists/');
-      if (text) {
-        setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
+      setUploadProgress(0);
+
+      if (activeCategory === 'global') {
+        // Stitch everything together!
+        setLoadingText('Stitching Global Database...');
+        const allData = [];
+        for (const cat of PRODUCT_CATEGORIES.filter(c => c.id !== 'global')) {
+          const text = await safeGetFileContent(cat.file, 'masterlists/');
+          if (text) allData.push(...parseCSVTable(text));
+        }
+        setDataCache(prev => ({ ...prev, global: allData }));
       } else {
-        setDataCache(prev => ({ ...prev, [activeCategory]: [] }));
+        setLoadingText(`Fetching ${activeCatObj.label} from cloud...`);
+        const text = await safeGetFileContent(activeCatObj.file, 'masterlists/');
+        if (text) setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
+        else setDataCache(prev => ({ ...prev, [activeCategory]: [] }));
       }
       setLoading(false);
     };
     loadData();
   }, [activeCategory, refreshTrigger]);
 
-  // Handle CSV Uploads
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (activeCategory === 'global') return alert("You cannot upload directly to the Global tab. Please upload to a specific category.");
+    
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    setLoading(true);
+    setLoading(true); setUploadProgress(5); setLoadingText('Reading CSV file locally...');
     const text = await files[0].text();
 
+    setLoadingText('Uploading securely to Backblaze...');
+    const interval = setInterval(() => {
+      setUploadProgress(prev => { if (prev >= 90) return prev; return prev + Math.floor(Math.random() * 8) + 2; });
+    }, 300);
+
     const success = await safeUploadTextToB2(text, activeCatObj.file, 'masterlists/');
+    clearInterval(interval);
+
     if (success) {
-      setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
-      alert(`✅ ${activeCatObj.label} Masterlist successfully updated!`);
-      setRefreshTrigger(prev => prev + 1);
+      setUploadProgress(100); setLoadingText('Processing and rendering database...');
+      setTimeout(() => {
+        setDataCache(prev => ({ ...prev, [activeCategory]: parseCSVTable(text) }));
+        setLoading(false); setUploadProgress(0);
+        alert(`✅ ${activeCatObj.label} Masterlist successfully updated!`);
+        setRefreshTrigger(prev => prev + 1);
+      }, 600);
     } else {
-      alert("❌ Upload failed. Please try again.");
+      setLoading(false); setUploadProgress(0); alert("❌ Upload failed. Please try again.");
     }
-    setLoading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const currentData = dataCache[activeCategory] || [];
+  const filteredData = searchQuery ? currentData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) : currentData;
 
-  const filteredData = searchQuery 
-    ? currentData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(searchQuery.toLowerCase()))) 
-    : currentData;
+  // 🎯 Toggle Row Selection
+  const toggleRow = (index: number) => {
+    const newSet = new Set(selectedRows);
+    if (newSet.has(index)) newSet.delete(index); else newSet.add(index);
+    setSelectedRows(newSet);
+  };
 
-  const headers = currentData.length > 0 ? Object.keys(currentData[0]) : [];
+  // 🎯 Toggle Column Selection
+  const toggleColumn = (key: string) => {
+    const newSet = new Set(visibleColumns);
+    if (newSet.has(key)) newSet.delete(key); else newSet.add(key);
+    setVisibleColumns(newSet);
+  };
+
+  // 🎯 Smart Export Logic (Exports ONLY visible columns for ONLY selected rows)
+  const handleSmartExport = () => {
+    const rowsToExport = selectedRows.size > 0 ? filteredData.filter((_, i) => selectedRows.has(i)) : filteredData;
+    
+    // Reconstruct data dict with only visible columns
+    const optimizedData = rowsToExport.map(row => {
+      const obj: any = {};
+      flattenedSchemaCols.forEach((col: any) => {
+        if (visibleColumns.has(col.dataKey)) {
+          obj[col.name] = row[col.dataKey] || '';
+        }
+      });
+      return obj;
+    });
+
+    downloadCSV(optimizedData, `${activeCategory}_export.csv`);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       
-      {/* GROUPED DEEP-DIVE MODAL */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
@@ -587,47 +661,38 @@ function MasterlistWorkspace() {
                   <p className="text-xs text-slate-500">{activeCatObj.label} Catalog Profile</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedProduct(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setSelectedProduct(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6">
-              {schemaWithKeys.map(group => (
-                <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
-                  <h4 className={`text-xs font-bold p-2 uppercase tracking-wider ${group.color} ${group.text}`}>{group.group}</h4>
-                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50">
-                    
-                    {group.subgroups.flatMap((sg: any) => sg.colsWithKey).map((colObj: any) => {
-                      const value = selectedProduct[colObj.dataKey];
-                      if (!value) return null; // Hide empty rows cleanly
+              {schemaWithKeys.map(group => {
+                const colsToRender = group.subgroups.flatMap((sg: any) => sg.colsWithKey).filter((c:any) => visibleColumns.has(c.dataKey));
+                if (colsToRender.length === 0) return null; // Don't show empty groups
 
-                      const isImage = colObj.name.toLowerCase().includes('image') && String(value).startsWith('http');
-
-                      return (
-                        <div key={colObj.dataKey} className="flex flex-col border-b border-slate-200 pb-1">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">{colObj.name}</span>
-                          {/* 🖼️ RENDER REAL IMAGES IN THE MODAL */}
-                          {isImage ? (
-                            <a href={value as string} target="_blank" rel="noreferrer" className="block mt-1.5 hover:opacity-80 transition-opacity" title="Click to open full size">
-                              <img 
-                                src={value as string} 
-                                alt={colObj.name} 
-                                className="h-20 w-auto rounded-md border border-slate-200 shadow-sm object-contain bg-white"
-                                loading="lazy"
-                              />
-                            </a>
-                          ) : (
-                            <span className="text-xs text-slate-800 break-words font-medium">{value as string}</span>
-                          )}
-                        </div>
-                      )
-                    })}
+                return (
+                  <div key={group.group} className="border border-slate-200 rounded-lg overflow-hidden">
+                    <h4 className={`text-xs font-bold p-2 uppercase tracking-wider ${group.color} ${group.text}`}>{group.group}</h4>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50">
+                      {colsToRender.map((colObj: any) => {
+                        const value = selectedProduct[colObj.dataKey];
+                        if (!value) return null;
+                        const isImage = colObj.name.toLowerCase().includes('image') && String(value).startsWith('http');
+                        return (
+                          <div key={colObj.dataKey} className="flex flex-col border-b border-slate-200 pb-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">{colObj.name}</span>
+                            {isImage ? (
+                              <a href={value as string} target="_blank" rel="noreferrer" className="block mt-1.5 hover:opacity-80 transition-opacity" title="Click to open full size">
+                                <img src={value as string} alt={colObj.name} className="h-20 w-auto rounded-md border border-slate-200 shadow-sm object-contain bg-white" loading="lazy" />
+                              </a>
+                            ) : <span className="text-xs text-slate-800 break-words font-medium">{value as string}</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
-            
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
               <Button onClick={() => setSelectedProduct(null)}>Close Viewer</Button>
             </div>
@@ -637,15 +702,18 @@ function MasterlistWorkspace() {
 
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Unified Masterlists</h2>
-          <p className="text-slate-500 mt-1">Manage your 90+ column product databases by category.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Data Extraction & Masterlists</h2>
+          <p className="text-slate-500 mt-1">Use the Global Tab to select specific rows and columns across your entire database.</p>
         </div>
         
-        <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-        <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
-          <UploadCloud className="w-4 h-4 mr-2" />
-          Overwrite / Upload {activeCatObj.label} CSV
-        </Button>
+        {activeCategory !== 'global' && (
+          <>
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
+            <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
+              <UploadCloud className="w-4 h-4 mr-2" /> Overwrite {activeCatObj.label}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* 🟢 CATEGORY TABS */}
@@ -654,41 +722,92 @@ function MasterlistWorkspace() {
           <button
             key={cat.id}
             onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
-            className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap flex items-center transition-colors ${
+            className={`px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap flex items-center transition-colors ${
               activeCategory === cat.id 
-              ? 'border-blue-600 text-blue-700 font-bold bg-blue-50/50' 
+              ? (cat.id === 'global' ? 'border-purple-600 text-purple-700 font-bold bg-purple-50' : 'border-blue-600 text-blue-700 font-bold bg-blue-50/50') 
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            {cat.label} Masterlist
+            {cat.label}
           </button>
         ))}
       </div>
 
-      <Card className="p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-          <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} active records in <b>{activeCatObj.label}</b></span>
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
+      <Card className="p-6 relative">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+          <div className="flex items-center space-x-3">
+            <span className="text-sm font-medium text-slate-600">Showing {filteredData.length} records</span>
+            {selectedRows.size > 0 && (
+              <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded-md">{selectedRows.size} Rows Selected</span>
+            )}
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             <input 
               type="text" 
               placeholder={`Search ${activeCatObj.label}...`} 
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)} 
-              className="w-full sm:w-80 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-64 p-2 border border-slate-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500"
             />
-            <Button variant="outline" onClick={() => downloadCSV(filteredData, `masterlist_${activeCategory}.csv`)}>
-              <Download className="w-4 h-4 mr-2"/> Export
+            
+            <Button variant="secondary" onClick={() => setShowColumnFilter(!showColumnFilter)} className="relative">
+              <List className="w-4 h-4 mr-2" /> Columns ({visibleColumns.size}/{flattenedSchemaCols.length})
+            </Button>
+
+            <Button variant="outline" onClick={handleSmartExport} className="border-blue-200 text-blue-700 hover:bg-blue-50">
+              <Download className="w-4 h-4 mr-2"/> Export Selected
             </Button>
           </div>
         </div>
 
+        {/* ⚙️ COLUMN VISIBILITY FILTER MODAL */}
+        {showColumnFilter && (
+          <div className="absolute top-20 right-6 z-40 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-80 max-h-96 flex flex-col animate-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="font-bold text-slate-800">Filter Columns</h4>
+              <div className="flex space-x-2">
+                <button onClick={() => setVisibleColumns(new Set(flattenedSchemaCols.map((c:any)=>c.dataKey)))} className="text-xs text-blue-600 hover:underline">All</button>
+                <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 space-y-2 pr-2">
+              {schemaWithKeys.map(g => (
+                <div key={g.group} className="mb-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{g.group}</p>
+                  {g.subgroups.flatMap((sg:any) => sg.colsWithKey).map((colObj: any) => (
+                    <label key={colObj.dataKey} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={visibleColumns.has(colObj.dataKey)} 
+                        onChange={() => toggleColumn(colObj.dataKey)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="truncate" title={colObj.name}>{colObj.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <Button onClick={() => setShowColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply Filters</Button>
+          </div>
+        )}
+
         {loading ? (
-          <div className="p-12 text-center text-slate-500 animate-pulse">Loading {activeCatObj.label} super-grid from cloud...</div>
-        ) : currentData.length === 0 ? (
+          <div className="p-16 flex flex-col items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50 min-h-[300px]">
+            {activeCategory === 'global' ? <Database className="w-12 h-12 mb-4 text-purple-600 animate-pulse" /> : <UploadCloud className="w-12 h-12 mb-4 text-blue-600 animate-bounce" />}
+            <p className="font-semibold text-slate-700 text-lg">{loadingText}</p>
+            {uploadProgress > 0 && (
+              <div className="w-full max-w-md mt-6">
+                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full transition-all duration-300" style={{ width: `${Math.min(uploadProgress, 100)}%` }}/></div>
+                <div className="flex justify-between mt-2 text-xs text-slate-500 font-bold uppercase tracking-wider"><span>Uploading...</span><span>{Math.min(uploadProgress, 100)}%</span></div>
+              </div>
+            )}
+          </div>
+        ) : filteredData.length === 0 ? (
           <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
             <List className="w-12 h-12 mx-auto mb-4 text-slate-300" />
             <p>No database loaded for {activeCatObj.label}.</p>
-            <p className="text-sm mt-2">Click the Upload button above to import your flat CSV file.</p>
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[700px] border border-slate-200 rounded-lg shadow-sm">
@@ -696,37 +815,49 @@ function MasterlistWorkspace() {
               <thead className="bg-slate-100 sticky top-0 z-20">
                 {/* TIER 1: TOP LEVEL GROUPS */}
                 <tr>
-                  <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-0 z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
+                  <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-0 z-30 shadow-[1px_0_0_0_#cbd5e1] text-center" rowSpan={3}>
+                    <input type="checkbox" onChange={(e) => {
+                      if(e.target.checked) setSelectedRows(new Set(filteredData.map((_, i) => i)));
+                      else setSelectedRows(new Set());
+                    }} checked={selectedRows.size === filteredData.length && filteredData.length > 0} className="rounded border-slate-300" />
+                  </th>
+                  <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-[36px] z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
                   {schemaWithKeys.map(g => {
-                    const totalCols = g.subgroups.reduce((acc: number, sg: any) => acc + sg.colsWithKey.length, 0);
-                    return <th key={g.group} colSpan={totalCols} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
+                    const visibleGroupCols = g.subgroups.flatMap((sg:any) => sg.colsWithKey).filter((c:any) => visibleColumns.has(c.dataKey));
+                    if (visibleGroupCols.length === 0) return null;
+                    return <th key={g.group} colSpan={visibleGroupCols.length} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
                   })}
                 </tr>
                 
                 {/* TIER 2: SUB GROUPS */}
                 <tr>
-                  {schemaWithKeys.flatMap((g, gIndex) => g.subgroups.map((sg: any, sgIndex: number) => (
-                    <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={sg.colsWithKey.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
-                  )))}
+                  {schemaWithKeys.flatMap((g, gIndex) => g.subgroups.map((sg: any, sgIndex: number) => {
+                    const visibleSgCols = sg.colsWithKey.filter((c:any) => visibleColumns.has(c.dataKey));
+                    if (visibleSgCols.length === 0) return null;
+                    return <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={visibleSgCols.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
+                  }))}
                 </tr>
 
                 {/* TIER 3: ACTUAL COLUMN NAMES */}
                 <tr>
-                  {flattenedSchemaCols.map((colObj: any, i: number) => (
+                  {flattenedSchemaCols.filter((c:any) => visibleColumns.has(c.dataKey)).map((colObj: any) => (
                     <th key={colObj.dataKey} className="p-2 text-[10px] font-semibold border-r border-b border-slate-300 bg-white truncate max-w-[150px]" title={colObj.name}>{colObj.name}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredData.slice(0, 500).map((row, rowIndex) => (
-                  <tr key={rowIndex} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0]">
+                  <tr key={rowIndex} className={`hover:bg-slate-50 transition-colors ${selectedRows.has(rowIndex) ? 'bg-blue-50/50' : ''}`}>
+                    <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] text-center">
+                       <input type="checkbox" checked={selectedRows.has(rowIndex)} onChange={() => toggleRow(rowIndex)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                    </td>
+                    <td className="p-2 border-r border-slate-200 bg-white group-hover:bg-slate-50 sticky left-[36px] z-10 shadow-[1px_0_0_0_#e2e8f0]">
                       <Button variant="secondary" className="text-[10px] py-1 px-3 w-full whitespace-nowrap" onClick={() => setSelectedProduct(row)}>
                         <ZoomIn className="w-3 h-3 mr-1" /> View Details
                       </Button>
                     </td>
                     
-                    {flattenedSchemaCols.map((colObj: any, colIndex: number) => {
+                    {flattenedSchemaCols.filter((c:any) => visibleColumns.has(c.dataKey)).map((colObj: any) => {
                       const val = String(row[colObj.dataKey] || '');
                       const isImage = colObj.name.toLowerCase().includes('image') && val.startsWith('http');
                       const isStatusActive = colObj.name.toLowerCase() === 'status' && val.toLowerCase() === 'active';
@@ -755,266 +886,6 @@ function MasterlistWorkspace() {
           </div>
         )}
       </Card>
-    </div>
-  );
-}
-
-function CatalogMonitor() {
-  const [activeTab, setActiveTab] = useState('analysis');
-  const [loading, setLoading] = useState(false);
-  const [oldFile, setOldFile] = useState('');
-  const [newFile, setNewFile] = useState('');
-  const [reportNameInput, setReportNameInput] = useState('');
-  const [changesList, setChangesList] = useState<any[]>([]);
-  const [totalMonitored, setTotalMonitored] = useState(0);
-  const [hasRun, setHasRun] = useState(false);
-  
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const snapshots = useB2Files('snapshots/', refreshTrigger);
-  const reportFiles = useB2Files('reports/', refreshTrigger);
-
-  const [reportsDataFull, setReportsDataFull] = useState<any[]>([]);
-  const [selectedReportName, setSelectedReportName] = useState('');
-  const [dashSearch, setDashSearch] = useState('');
-
-  useEffect(() => {
-    if (snapshots.length >= 2) {
-      if (!oldFile) setOldFile(snapshots[0]);
-      if (!newFile) setNewFile(snapshots[snapshots.length - 1]);
-    }
-  }, [snapshots.length]);
-
-  useEffect(() => {
-    if (reportFiles.includes('monitoring_reports.csv')) {
-      safeGetFileContent('monitoring_reports.csv', 'reports/').then(text => {
-        const data = parseCSVTable(text);
-        setReportsDataFull(data);
-        const uniqueSet = new Set<string>();
-        data.forEach(r => { if (r.current_batch) uniqueSet.add(r.current_batch); });
-        const unique = Array.from(uniqueSet);
-        if (unique.length > 0 && !selectedReportName) setSelectedReportName(unique[unique.length - 1]);
-      });
-    } else {
-      setReportsDataFull([]);
-    }
-  }, [reportFiles.length, refreshTrigger]);
-
-  const handleRunDeltaAnalysis = async () => {
-    if (!oldFile || !newFile) return alert("Please select baseline and target snapshot files.");
-    setLoading(true);
-
-    const oldText = await safeGetFileContent(oldFile, 'snapshots/');
-    const newText = await safeGetFileContent(newFile, 'snapshots/');
-    
-    const oldData = parseCSVTable(oldText).map(unpackRecord);
-    const newData = parseCSVTable(newText).map(unpackRecord);
-
-    const oldMap = new Map(oldData.map(r => [r.asin || r.ASIN, r]));
-    const newMap = new Map(newData.map(r => [r.asin || r.ASIN, r]));
-
-    const asinSet = new Set<string>();
-    oldMap.forEach((_, key) => asinSet.add(String(key)));
-    newMap.forEach((_, key) => asinSet.add(String(key)));
-    const allAsins = Array.from(asinSet).filter(Boolean);
-    
-    const changes: any[] = [];
-    const buyboxKeywords = ["buy_box", "buybox", "featured_offer", "featured_merchant"];
-
-    allAsins.forEach(asin => {
-      const oldRow = oldMap.get(asin); const newRow = newMap.get(asin);
-      if (!oldRow || !newRow) return;
-
-      if ((newRow.title || newRow.Title || '') !== (oldRow.title || oldRow.Title || '')) changes.push({ asin, field_changed: "Title", old_value: oldRow.title || oldRow.Title || '', new_value: newRow.title || newRow.Title || '' });
-      if ((newRow.list_price || '') !== (oldRow.list_price || '')) changes.push({ asin, field_changed: "Price", old_value: oldRow.list_price || '', new_value: newRow.list_price || '' });
-      for (let i = 1; i <= 5; i++) {
-        const bpCol = `bullet_point_${i}`;
-        if ((newRow[bpCol] || '') !== (oldRow[bpCol] || '')) changes.push({ asin, field_changed: `Bullet Point ${i}`, old_value: oldRow[bpCol] || '', new_value: newRow[bpCol] || '' });
-      }
-      
-      const allKeysSet = new Set<string>();
-      Object.keys(oldRow).forEach(k => allKeysSet.add(k));
-      Object.keys(newRow).forEach(k => allKeysSet.add(k));
-      
-      allKeysSet.forEach(k => {
-        if (buyboxKeywords.some(kw => k.toLowerCase().includes(kw))) {
-          if ((newRow[k] || '') !== (oldRow[k] || '')) changes.push({ asin, field_changed: `Buy Box (${k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())})`, old_value: oldRow[k] || '', new_value: newRow[k] || '' });
-        }
-      });
-    });
-
-    setTotalMonitored(allAsins.length); setChangesList(changes); setReportNameInput(`${newFile} (vs ${oldFile})`); setHasRun(true); setLoading(false);
-  };
-
-  const changedAsinSet = new Set<string>();
-  changesList.forEach(c => changedAsinSet.add(c.asin));
-  const itemsChanged = changedAsinSet.size;
-  const healthScore = totalMonitored > 0 ? (((totalMonitored - itemsChanged) / totalMonitored) * 100).toFixed(1) : '0';
-
-  const handleSaveReport = async () => {
-    if (!reportNameInput.trim()) return alert("Please enter a valid report name.");
-    const reportRecords = changesList.map(c => ({ asin: c.asin, current_batch: reportNameInput.trim(), previous_batch: oldFile, field_changed: c.field_changed, old_value: c.old_value, new_value: c.new_value, report_notes: "" }));
-    const updated = reportsDataFull.concat(reportRecords);
-    await safeUploadTextToB2(toCSV(updated), 'monitoring_reports.csv', 'reports/');
-    setRefreshTrigger(r => r + 1);
-    alert(`Modifications saved into report '${reportNameInput.trim()}'!`);
-  };
-
-  const savedReportSet = new Set<string>();
-  reportsDataFull.forEach(r => { if (r.current_batch) savedReportSet.add(r.current_batch); });
-  const savedReportNames = Array.from(savedReportSet);
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Catalog Listing Monitor</h2>
-        <p className="text-slate-500 mt-1">Track catalog changes and view historic alerts dashboard.</p>
-      </div>
-
-      <div className="flex border-b border-slate-200">
-        <button onClick={() => setActiveTab('analysis')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'analysis' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Run Delta Analysis</button>
-        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Analytics Dashboard</button>
-      </div>
-
-      {activeTab === 'analysis' && (
-        <div className="space-y-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Compare Snapshots</h3>
-            {snapshots.length < 2 ? (
-              <div className="p-6 text-center text-slate-500 border border-dashed rounded-lg">No snapshots available. Please ingest at least 2 snapshot files first.</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Older)</label>
-                    <select className="w-full border-slate-300 p-2 border rounded-md text-sm bg-white" value={oldFile} onChange={e => setOldFile(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Newer)</label>
-                    <select className="w-full border-slate-300 p-2 border rounded-md text-sm bg-white" value={newFile} onChange={e => setNewFile(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
-                  </div>
-                </div>
-                <Button onClick={handleRunDeltaAnalysis} disabled={loading}>{loading ? 'Running Analysis...' : 'Run Comparison'}</Button>
-              </>
-            )}
-          </Card>
-
-          {hasRun && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="p-6 border-l-4 border-l-blue-500"><p className="text-slate-500 text-sm font-medium">Total ASINs</p><h3 className="text-3xl font-bold text-slate-900 mt-2">{totalMonitored}</h3></Card>
-                <Card className="p-6 border-l-4 border-l-amber-500"><p className="text-slate-500 text-sm font-medium">ASINs Altered</p><h3 className="text-3xl font-bold text-slate-900 mt-2">{itemsChanged}</h3></Card>
-                <Card className="p-6 border-l-4 border-l-emerald-500"><p className="text-slate-500 text-sm font-medium">Catalog Health Score</p><h3 className="text-3xl font-bold text-slate-900 mt-2">{healthScore}%</h3></Card>
-              </div>
-
-              {changesList.length > 0 ? (
-                <>
-                  <Card className="p-6 bg-amber-50 border-amber-200 flex justify-between items-center">
-                    <p className="text-amber-900 font-medium">Detected {changesList.length} total modifications across {itemsChanged} ASINs.</p>
-                    <Button onClick={() => downloadCSV(changesList, 'active_delta_report.csv')}><Download className="w-4 h-4 mr-2"/> Download Delta CSV</Button>
-                  </Card>
-
-                  <Card className="overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                      <h3 className="font-semibold text-slate-800">Detected Field Modifications</h3>
-                      {changesList.length > 500 && <span className="text-xs text-slate-500 font-medium bg-slate-200 px-2 py-1 rounded-full">Previewing Top 500</span>}
-                    </div>
-                    <div className="overflow-x-auto max-h-[400px]">
-                      <table className="w-full text-sm text-left border-collapse">
-                        <thead className="bg-white border-b sticky top-0 text-slate-500">
-                          <tr><th className="p-3">ASIN</th><th className="p-3">Altered Field</th><th className="p-3">Old Value</th><th className="p-3">New Value</th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 bg-white">
-                          {changesList.slice(0, 500).map((row, i) => (
-                            <tr key={i} className="hover:bg-slate-50">
-                              <td className="p-3 font-mono font-medium text-slate-900">{row.asin}</td>
-                              <td className="p-3 font-medium text-slate-800">{row.field_changed}</td>
-                              <td className="p-3 text-red-700 bg-red-50/50 max-w-[300px] truncate">{row.old_value || <span className="text-slate-400 italic">Empty</span>}</td>
-                              <td className="p-3 text-emerald-700 bg-emerald-50/50 max-w-[300px] truncate">{row.new_value || <span className="text-slate-400 italic">Empty</span>}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
-
-                  <Card className="p-6 space-y-4">
-                    <h3 className="font-semibold text-slate-800">Save Report</h3>
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                      <input type="text" value={reportNameInput} onChange={e => setReportNameInput(e.target.value)} className="flex-1 p-2 border border-slate-300 rounded-md text-sm w-full" placeholder="Report Name" />
-                      <Button onClick={handleSaveReport}>Lock & Flag Modifications to Dashboard</Button>
-                    </div>
-                  </Card>
-                </>
-              ) : (
-                <Card className="p-6 bg-emerald-50 border-emerald-200">
-                  <p className="text-emerald-800 font-medium text-center">Catalog is perfectly synchronized. No changes detected.</p>
-                </Card>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'dashboard' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-end">
-            <h2 className="text-xl font-bold text-slate-900">Modification Intelligence</h2>
-            {savedReportNames.length > 0 && (
-              <select className="border-slate-300 p-2 border rounded-md text-sm bg-white" value={selectedReportName} onChange={e => setSelectedReportName(e.target.value)}>{savedReportNames.map(s => <option key={s}>{s}</option>)}</select>
-            )}
-          </div>
-
-          {savedReportNames.length === 0 ? (
-            <Card className="p-12 text-center text-slate-500 border-dashed">No flagged reports available yet.</Card>
-          ) : (
-            (() => {
-              const currentReportData = reportsDataFull.filter(r => r.current_batch === selectedReportName);
-              const fieldCounts = currentReportData.reduce((acc, row) => { acc[row.field_changed] = (acc[row.field_changed] || 0) + 1; return acc; }, {} as Record<string, number>);
-              const modeField = Object.keys(fieldCounts).sort((a,b) => fieldCounts[b] - fieldCounts[a])[0] || 'N/A';
-              const pieData = Object.keys(fieldCounts).map(k => ({ name: k, value: fieldCounts[k] }));
-              const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-              const filteredReportRows = currentReportData.filter(r => !dashSearch || Object.values(r).some(v => String(v).toLowerCase().includes(dashSearch.toLowerCase())));
-
-              const affectedSet = new Set<string>();
-              currentReportData.forEach(r => affectedSet.add(r.asin));
-
-              return (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <Card className="p-6"><p className="text-slate-500 text-sm font-medium">Affected ASINs</p><h3 className="text-3xl font-bold text-slate-900 mt-2">{affectedSet.size}</h3></Card>
-                    <Card className="p-6"><p className="text-slate-500 text-sm font-medium">Total Flagged Attributes</p><h3 className="text-3xl font-bold text-slate-900 mt-2">{currentReportData.length}</h3></Card>
-                    <Card className="p-6"><p className="text-slate-500 text-sm font-medium">Most Targeted Field</p><h3 className="text-3xl font-bold text-slate-900 mt-2 truncate">{modeField}</h3></Card>
-                  </div>
-                  <Card className="p-6">
-                    <h3 className="font-semibold text-slate-800 mb-4">Distribution of Modifications</h3>
-                    <div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value">{pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div>
-                  </Card>
-                  <Card className="overflow-hidden">
-                    <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                      <h3 className="font-semibold text-slate-800">Deep Dive: Flagged Entries</h3>
-                      <input type="text" placeholder="Search reports..." value={dashSearch} onChange={e => setDashSearch(e.target.value)} className="p-1.5 border border-slate-300 rounded-md text-sm bg-white"/>
-                    </div>
-                    <div className="overflow-x-auto max-h-[400px]">
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-white border-b sticky top-0 text-slate-500"><tr><th className="p-3">ASIN</th><th className="p-3">Altered Field</th><th className="p-3">Old Value</th><th className="p-3">New Value</th></tr></thead>
-                        <tbody className="divide-y divide-slate-100 bg-white">
-                          {filteredReportRows.slice(0, 500).map((r, i) => (
-                            <tr key={i} className="hover:bg-slate-50"><td className="p-3 font-mono font-medium">{r.asin}</td><td className="p-3">{r.field_changed}</td><td className="p-3 text-red-700 bg-red-50/50 max-w-[200px] truncate">{r.old_value}</td><td className="p-3 text-emerald-700 bg-emerald-50/50 max-w-[200px] truncate">{r.new_value}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="p-4 border-t bg-slate-50 flex justify-between items-center">
-                      <Button onClick={() => downloadCSV(filteredReportRows, `${selectedReportName}_Report.csv`)}>Download Flagged Report (CSV)</Button>
-                      <Button variant="danger" onClick={async () => { await safeUploadTextToB2(toCSV(reportsDataFull.filter(r => r.current_batch !== selectedReportName)), 'monitoring_reports.csv', 'reports/'); setSelectedReportName(''); setRefreshTrigger(r => r + 1); }}>Delete This Report</Button>
-                    </div>
-                  </Card>
-                </>
-              );
-            })()
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1815,7 +1686,7 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Image Vault</h2>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
