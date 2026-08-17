@@ -90,7 +90,6 @@ const parseCSVTable = (text: string): Record<string, string>[] => {
 
   if (rows.length < 2) return []; 
   
-  //UPGRADED: Intelligent Duplicate Column Handler
   const rawHeaders = rows[0].map(h => h.trim() || 'Empty');
   const headers: string[] = [];
   const headerCounts: Record<string, number> = {};
@@ -239,9 +238,8 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
 }
 
 // ==========================================
-// 4. MODULE COMPONENTS
+// 4. MODULE: DATA INGESTION
 // ==========================================
-
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
@@ -502,7 +500,7 @@ function ImageVault() {
       if (mp === 'ALL') {
         textToCopy = `FR:  ${urls.FR}\nOX:  ${urls.OX}\nSOT: ${urls.SOT}\nMUA: ${urls.MUA}`;
       } else {
-        textToCopy = urls[mp];
+        textToCopy = urls[mp as keyof typeof urls];
       }
 
       await navigator.clipboard.writeText(textToCopy);
@@ -884,7 +882,7 @@ function ImageVault() {
                         <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                         <img src={imgUrl} alt={imgObj.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                       </div>
-                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                      <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                         {editingImage === uniqueImgKey ? (
                           <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                         ) : (
@@ -893,7 +891,18 @@ function ImageVault() {
                             <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
                           </div>
                         )}
-                        <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
+                        <div className="space-y-1 mt-auto">
+                          <div className="grid grid-cols-4 gap-1">
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'FR')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_FR` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>FR</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'OX')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_OX` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>OX</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'SOT')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_SOT` ? 'bg-emerald-500 text-white' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>SOT</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'MUA')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_MUA` ? 'bg-emerald-500 text-white' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}>MUA</button>
+                          </div>
+                          <div className="flex space-x-1">
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied All!' : 'Copy All 4'}</button>
+                            <button onClick={() => handleDeleteImage(imgObj.name, imgObj.album)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -2008,6 +2017,35 @@ function GlobalDeltaView() {
   );
 }
 
+const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
+  return data.filter(row => {
+    return Object.entries(filters).every(([key, filterValue]) => {
+      if (!filterValue) return true;
+      const rawVal = row[key];
+      const strVal = String(rawVal === null || rawVal === undefined ? '' : rawVal).toLowerCase();
+      const search = filterValue.toLowerCase().trim();
+
+      if (search.startsWith('>')) {
+        const num = parseFloat(search.substring(1));
+        const valNum = typeof rawVal === 'number' ? rawVal : parseFloat(strVal.replace(/[^0-9.-]+/g,""));
+        return !isNaN(valNum) && valNum > num;
+      }
+      if (search.startsWith('<')) {
+        const num = parseFloat(search.substring(1));
+        const valNum = typeof rawVal === 'number' ? rawVal : parseFloat(strVal.replace(/[^0-9.-]+/g,""));
+        return !isNaN(valNum) && valNum < num;
+      }
+      if (search.startsWith('=')) {
+        const num = parseFloat(search.substring(1));
+        const valNum = typeof rawVal === 'number' ? rawVal : parseFloat(strVal.replace(/[^0-9.-]+/g,""));
+        return !isNaN(valNum) && valNum === num;
+      }
+
+      return strVal.includes(search);
+    });
+  });
+};
+
 function AdsAnalysis() {
   const [activeTab, setActiveTab] = useState('perf');
   const [refreshTrigger] = useState(0);
@@ -2032,6 +2070,61 @@ function AdsAnalysis() {
 
   const [rawAdRows, setRawAdRows] = useState<Record<string, string>[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
+
+  const [campaignColFilters, setCampaignColFilters] = useState<Record<string, string>>({});
+  const [adGroupColFilters, setAdGroupColFilters] = useState<Record<string, string>>({});
+  const [termColFilters, setTermColFilters] = useState<Record<string, string>>({});
+  const [rawColFilters, setRawColFilters] = useState<Record<string, string>>({});
+
+  const [sortConfigs, setSortConfigs] = useState<Record<string, {key: string, dir: 'asc'|'desc'}>>({
+    campaigns: { key: 'Sales', dir: 'desc' },
+    adgroups: { key: 'Sales', dir: 'desc' },
+    terms: { key: 'Spend', dir: 'desc' },
+    raw: { key: '', dir: 'asc' }
+  });
+
+  const handleSort = (table: string, key: string) => {
+    setSortConfigs(prev => {
+      const current = prev[table];
+      let newDir: 'asc'|'desc' = 'desc';
+      if (current?.key === key) {
+        newDir = current.dir === 'asc' ? 'desc' : 'asc';
+      }
+      return { ...prev, [table]: { key, dir: newDir } };
+    });
+  };
+
+  const sortData = (data: any[], sortCfg: {key: string, dir: 'asc'|'desc'}) => {
+    if (!sortCfg || !sortCfg.key) return data;
+    return [...data].sort((a, b) => {
+      let valA = a[sortCfg.key];
+      let valB = b[sortCfg.key];
+
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+
+      const cleanA = String(valA).replace(/[$%,]/g, '').trim();
+      const cleanB = String(valB).replace(/[$%,]/g, '').trim();
+      const numA = Number(cleanA);
+      const numB = Number(cleanB);
+
+      if (cleanA !== '' && cleanB !== '' && !isNaN(numA) && !isNaN(numB)) {
+        return sortCfg.dir === 'asc' ? numA - numB : numB - numA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      if (strA < strB) return sortCfg.dir === 'asc' ? -1 : 1;
+      if (strA > strB) return sortCfg.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const SortIcon = ({ table, colKey }: { table: string, colKey: string }) => {
+    const cfg = sortConfigs[table];
+    if (cfg?.key !== colKey) return <span className="text-slate-300 ml-1 text-[10px]">↕</span>;
+    return <span className="text-blue-600 ml-1 text-[12px] font-black">{cfg.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
 
   useEffect(() => {
     if (adFiles.length > 0 && selectedAdFiles.length === 0) {
@@ -2115,12 +2208,22 @@ function AdsAnalysis() {
       ACOS: data.Sales > 0 ? (data.Spend / data.Sales) * 100 : 0,
       ROAS: data.Spend > 0 ? data.Sales / data.Spend : 0,
       Orders: data.Orders, CVR: data.Clicks > 0 ? (data.Orders / data.Clicks) * 100 : 0
-    })).sort((a, b) => sortBySales ? b.Sales - a.Sales : b.Spend - a.Spend).slice(0, limit);
+    })).slice(0, limit);
   };
 
-  const topCampaigns = useMemo(() => aggregateGroup('Campaign Name', cRowLimit, true), [filteredData, cRowLimit]);
-  const topAdGroups = useMemo(() => aggregateGroup('Ad Group Name', gRowLimit, true), [filteredData, gRowLimit]);
-  const topTerms = useMemo(() => aggregateGroup('Customer Search Term', tRowLimit, false), [filteredData, tRowLimit]);
+  const topCampaignsRaw = useMemo(() => aggregateGroup('Campaign Name', cRowLimit, true), [filteredData, cRowLimit]);
+  const topAdGroupsRaw = useMemo(() => aggregateGroup('Ad Group Name', gRowLimit, true), [filteredData, gRowLimit]);
+  const topTermsRaw = useMemo(() => aggregateGroup('Customer Search Term', tRowLimit, false), [filteredData, tRowLimit]);
+
+  const finalCampaigns = useMemo(() => applyAdsColFilters(topCampaignsRaw, campaignColFilters), [topCampaignsRaw, campaignColFilters]);
+  const finalAdGroups = useMemo(() => applyAdsColFilters(topAdGroupsRaw, adGroupColFilters), [topAdGroupsRaw, adGroupColFilters]);
+  const finalTerms = useMemo(() => applyAdsColFilters(topTermsRaw, termColFilters), [topTermsRaw, termColFilters]);
+  const finalRawData = useMemo(() => applyAdsColFilters(filteredData, rawColFilters), [filteredData, rawColFilters]);
+
+  const sortedCampaigns = useMemo(() => sortData(finalCampaigns, sortConfigs.campaigns), [finalCampaigns, sortConfigs.campaigns]);
+  const sortedAdGroups = useMemo(() => sortData(finalAdGroups, sortConfigs.adgroups), [finalAdGroups, sortConfigs.adgroups]);
+  const sortedTerms = useMemo(() => sortData(finalTerms, sortConfigs.terms), [finalTerms, sortConfigs.terms]);
+  const sortedRawData = useMemo(() => sortData(finalRawData, sortConfigs.raw), [finalRawData, sortConfigs.raw]);
 
   const uniqueCampaigns = useMemo(() => {
     const set = new Set<string>();
@@ -2139,6 +2242,8 @@ function AdsAnalysis() {
     rawAdRows.forEach(r => { const val = r['Match Type'] || r['match_type']; if(val) set.add(val); });
     return Array.from(set).sort();
   }, [rawAdRows]);
+
+  const leaderboardHeaders = ['Name', 'Impressions', 'Clicks', 'CTR', 'CPC', 'Spend', 'Sales', 'ACOS', 'ROAS', 'Orders', 'CVR'];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -2171,7 +2276,7 @@ function AdsAnalysis() {
             </div>
           </div>
 
-          <h3 className="font-semibold text-slate-800 border-b pb-2 text-sm pt-2">Target Filters</h3>
+          <h3 className="font-semibold text-slate-800 border-b pb-2 text-sm pt-2">Global Filters</h3>
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Campaign Name</label>
             <select multiple className="w-full border p-1 rounded-md text-xs h-20 bg-white" onChange={e => setSelectedCampaigns(Array.from(e.target.selectedOptions, o => o.value))}>
@@ -2202,8 +2307,8 @@ function AdsAnalysis() {
 
         <div className="lg:col-span-3 space-y-6">
           <div className="flex border-b border-slate-200 overflow-x-auto">
-            <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview Workspace</button>
-            <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Complete Raw Data Vault</button>
+            <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview</button>
+            <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Raw Data Vault</button>
             <button onClick={() => setActiveTab('export')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Export Hub</button>
           </div>
 
@@ -2233,6 +2338,9 @@ function AdsAnalysis() {
                     <Card className="p-4"><p className="text-xs text-slate-500 font-medium">CPC</p><p className="text-xl font-bold mt-1">${aggregate.cpc.toFixed(2)}</p></Card>
                   </div>
 
+                  <p className="text-[10px] text-slate-500 italic text-right px-2">💡 Pro tip: Use <strong>&gt;</strong> or <strong>&lt;</strong> in the column filters below (e.g., &gt;50)</p>
+
+                  {/* CAMPAIGN LEADERBOARD */}
                   <Card className="p-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-semibold text-slate-800">Leaderboard: Top Campaigns</h3>
@@ -2241,10 +2349,25 @@ function AdsAnalysis() {
                     <div className="overflow-x-auto border border-slate-200 rounded-lg">
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
-                          <tr><th className="p-2">Campaign Name</th><th className="p-2">Impressions</th><th className="p-2">Clicks</th><th className="p-2">CTR</th><th className="p-2">CPC</th><th className="p-2">Spend</th><th className="p-2">Sales</th><th className="p-2">ACOS</th><th className="p-2">ROAS</th><th className="p-2">Orders</th><th className="p-2">CVR</th></tr>
+                          <tr>
+                            {leaderboardHeaders.map(col => (
+                              <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('campaigns', col)}>
+                                <div className="flex items-center">
+                                  {col === 'Name' ? 'Campaign Name' : col} <SortIcon table="campaigns" colKey={col} />
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                          <tr className="bg-slate-100">
+                            {leaderboardHeaders.map(col => (
+                              <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
+                                <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={campaignColFilters[col] || ''} onChange={e => setCampaignColFilters(prev => ({...prev, [col]: e.target.value}))} />
+                              </th>
+                            ))}
+                          </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {topCampaigns.map((r, i) => (
+                          {sortedCampaigns.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
                               <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2">${r.Spend.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
                             </tr>
@@ -2254,6 +2377,7 @@ function AdsAnalysis() {
                     </div>
                   </Card>
 
+                  {/* AD GROUPS LEADERBOARD */}
                   <Card className="p-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-semibold text-slate-800">Leaderboard: Top Ad Groups</h3>
@@ -2262,10 +2386,25 @@ function AdsAnalysis() {
                     <div className="overflow-x-auto border border-slate-200 rounded-lg">
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
-                          <tr><th className="p-2">Ad Group Name</th><th className="p-2">Impressions</th><th className="p-2">Clicks</th><th className="p-2">CTR</th><th className="p-2">CPC</th><th className="p-2">Spend</th><th className="p-2">Sales</th><th className="p-2">ACOS</th><th className="p-2">ROAS</th><th className="p-2">Orders</th><th className="p-2">CVR</th></tr>
+                          <tr>
+                            {leaderboardHeaders.map(col => (
+                              <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('adgroups', col)}>
+                                <div className="flex items-center">
+                                  {col === 'Name' ? 'Ad Group Name' : col} <SortIcon table="adgroups" colKey={col} />
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                          <tr className="bg-slate-100">
+                            {leaderboardHeaders.map(col => (
+                              <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
+                                <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={adGroupColFilters[col] || ''} onChange={e => setAdGroupColFilters(prev => ({...prev, [col]: e.target.value}))} />
+                              </th>
+                            ))}
+                          </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {topAdGroups.map((r, i) => (
+                          {sortedAdGroups.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
                               <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2">${r.Spend.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
                             </tr>
@@ -2275,6 +2414,7 @@ function AdsAnalysis() {
                     </div>
                   </Card>
 
+                  {/* TERMS LEADERBOARD */}
                   <Card className="p-6 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-semibold text-slate-800">Leaderboard: Top Customer Search Terms</h3>
@@ -2283,10 +2423,25 @@ function AdsAnalysis() {
                     <div className="overflow-x-auto border border-slate-200 rounded-lg">
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
-                          <tr><th className="p-2">Customer Search Term</th><th className="p-2">Impressions</th><th className="p-2">Clicks</th><th className="p-2">CTR</th><th className="p-2">CPC</th><th className="p-2">Spend</th><th className="p-2">Sales</th><th className="p-2">ACOS</th><th className="p-2">ROAS</th><th className="p-2">Orders</th><th className="p-2">CVR</th></tr>
+                          <tr>
+                            {leaderboardHeaders.map(col => (
+                              <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('terms', col)}>
+                                <div className="flex items-center">
+                                  {col === 'Name' ? 'Customer Search Term' : col} <SortIcon table="terms" colKey={col} />
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                          <tr className="bg-slate-100">
+                            {leaderboardHeaders.map(col => (
+                              <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
+                                <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={termColFilters[col] || ''} onChange={e => setTermColFilters(prev => ({...prev, [col]: e.target.value}))} />
+                              </th>
+                            ))}
+                          </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {topTerms.map((r, i) => (
+                          {sortedTerms.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
                               <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Spend.toFixed(2)}</td><td className="p-2">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
                             </tr>
@@ -2301,20 +2456,42 @@ function AdsAnalysis() {
               {activeTab === 'raw' && (
                 <Card className="p-4 space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold text-slate-700">Total Filtered Rows: {filteredData.length}</span>
-                    <Button onClick={() => downloadCSV(filteredData, 'filtered_raw_ads.csv')}><Download className="w-4 h-4 mr-2"/> Download Raw CSV</Button>
+                    <span className="text-sm font-semibold text-slate-700">Total Filtered Rows: {finalRawData.length}</span>
+                    <Button onClick={() => downloadCSV(finalRawData, 'filtered_raw_ads.csv')}><Download className="w-4 h-4 mr-2"/> Download Raw CSV</Button>
                   </div>
                   <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg">
                     <table className="w-full text-xs text-left whitespace-nowrap">
-                      <thead className="bg-slate-50 border-b sticky top-0">
-                        <tr>{Object.keys(filteredData[0] || {}).map(k => <th key={k} className="p-2">{k}</th>)}</tr>
+                      <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
+                        <tr>
+                          {Object.keys(filteredData[0] || {}).map(k => (
+                            <th key={k} className="p-2 text-slate-700 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('raw', k)}>
+                              <div className="flex items-center">
+                                {k} <SortIcon table="raw" colKey={k} />
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                        <tr className="bg-slate-100">
+                          {Object.keys(filteredData[0] || {}).map(k => (
+                            <th key={`filter-${k}`} className="p-1 border-t border-slate-200">
+                              <input 
+                                type="text" 
+                                placeholder={`Filter...`} 
+                                className="w-full min-w-[60px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white"
+                                value={rawColFilters[k] || ''}
+                                onChange={e => setRawColFilters(prev => ({...prev, [k]: e.target.value}))}
+                              />
+                            </th>
+                          ))}
+                        </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {filteredData.slice(0, 200).map((row, i) => (
+                        {sortedRawData.slice(0, 200).map((row, i) => (
                           <tr key={i} className="hover:bg-slate-50">{Object.values(row).map((v: any, j) => <td key={j} className="p-2">{v}</td>)}</tr>
                         ))}
                       </tbody>
                     </table>
+                    {sortedRawData.length > 200 && <div className="text-center text-xs text-slate-400 p-2">Showing first 200 rows. Use export to view all.</div>}
                   </div>
                 </Card>
               )}
@@ -2329,20 +2506,21 @@ function AdsAnalysis() {
 
                   <Card className="p-6 space-y-4">
                     <h3 className="font-semibold text-slate-800">Interactive Excel Export</h3>
-                    <p className="text-sm text-slate-500">Select data views to include in your exported file:</p>
+                    <p className="text-sm text-slate-500">Select data views to include in your exported file (filters apply!):</p>
                     <div className="space-y-2 text-sm">
                       <label className="flex items-center space-x-2"><input type="checkbox" checked={optSummary} onChange={e => setOptSummary(e.target.checked)}/><span>Executive Summary Metrics</span></label>
-                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optCampaigns} onChange={e => setOptCampaigns(e.target.checked)}/><span>Top Campaigns Leaderboard</span></label>
-                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optAdGroups} onChange={e => setOptAdGroups(e.target.checked)}/><span>Top Ad Groups Leaderboard</span></label>
-                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optTerms} onChange={e => setOptTerms(e.target.checked)}/><span>Top Search Terms Leaderboard</span></label>
+                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optCampaigns} onChange={e => setOptCampaigns(e.target.checked)}/><span>Filtered Campaigns Leaderboard</span></label>
+                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optAdGroups} onChange={e => setOptAdGroups(e.target.checked)}/><span>Filtered Ad Groups Leaderboard</span></label>
+                      <label className="flex items-center space-x-2"><input type="checkbox" checked={optTerms} onChange={e => setOptTerms(e.target.checked)}/><span>Filtered Search Terms Leaderboard</span></label>
                       <label className="flex items-center space-x-2"><input type="checkbox" checked={optRaw} onChange={e => setOptRaw(e.target.checked)}/><span>Filtered Raw Data</span></label>
                     </div>
                     <Button onClick={() => {
                       let exportDataset: any[] = [];
                       if (optSummary) exportDataset.push({ "Metric": "Total Spend", "Value": aggregate.totalSpend }, { "Metric": "Total Sales", "Value": aggregate.totalSales });
-                      if (optCampaigns) exportDataset = exportDataset.concat(topCampaigns);
-                      if (optTerms) exportDataset = exportDataset.concat(topTerms);
-                      if (optRaw) exportDataset = exportDataset.concat(filteredData);
+                      if (optCampaigns) exportDataset = exportDataset.concat(sortedCampaigns);
+                      if (optAdGroups) exportDataset = exportDataset.concat(sortedAdGroups);
+                      if (optTerms) exportDataset = exportDataset.concat(sortedTerms);
+                      if (optRaw) exportDataset = exportDataset.concat(sortedRawData);
                       downloadCSV(exportDataset, 'Amazon_Advertising_Export.csv');
                     }}>Download Selected Views (CSV)</Button>
                   </Card>
