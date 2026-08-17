@@ -90,7 +90,6 @@ const parseCSVTable = (text: string): Record<string, string>[] => {
 
   if (rows.length < 2) return []; 
   
-  //UPGRADED: Intelligent Duplicate Column Handler
   const rawHeaders = rows[0].map(h => h.trim() || 'Empty');
   const headers: string[] = [];
   const headerCounts: Record<string, number> = {};
@@ -239,9 +238,8 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
 }
 
 // ==========================================
-// 4. MODULE COMPONENTS
+// 4. MODULE: DATA INGESTION
 // ==========================================
-
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
@@ -415,13 +413,16 @@ function DataIngestion() {
     </div>
   );
 }
-// --- TAB 6: IMAGE VAULT ---
+
+// ==========================================
+// MODULE 2: IMAGE VAULT
+// ==========================================
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
   const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  const [copied, setCopied] = useState('');
-  const [copiedAll, setCopiedAll] = useState(false);
+  const [copiedKey, setCopiedKey] = useState('');
+  const [copiedAll, setCopiedAll] = useState<string | false>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const imagesWithDetails = useB2FilesWithDetails('images/', refresh);
@@ -443,19 +444,19 @@ function ImageVault() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatusText, setUploadStatusText] = useState('');
 
-  useEffect(() => {
-    const handleMouseUp = () => setDragMode(null);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
-  }, []);
-
   const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
   const [editAlbumText, setEditAlbumText] = useState('');
   const [editingImage, setEditingImage] = useState<string | null>(null);
   const [editImageText, setEditImageText] = useState('');
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
+  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, fr: string, ox: string, sot: string}[] | null>(null);
+
+  useEffect(() => {
+    const handleMouseUp = () => setDragMode(null);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const albumData = useMemo(() => {
     const data: Record<string, {name: string, date: number}[]> = {};
@@ -601,16 +602,14 @@ function ImageVault() {
     setUploadProgress(0);
     
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
-    const successfulUploads: {name: string, url: string}[] = [];
+    const successfulUploads: {name: string, fr: string, ox: string, sot: string}[] = [];
     const totalFiles = pendingFiles.length;
 
     for (let i = 0; i < totalFiles; i++) {
       const file = pendingFiles[i];
-      
       setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${file.name}`);
-      const baseProgress = (i / totalFiles) * 100;
-      setUploadProgress(baseProgress);
-      
+      setUploadProgress((i / totalFiles) * 100);
+
       const interval = setInterval(() => {
         setUploadProgress(prev => {
           const maxForThisFile = ((i + 1) / totalFiles) * 100 - 2;
@@ -624,13 +623,22 @@ function ImageVault() {
         const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
         const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         if (res.ok) {
-          const publicUrl = await getPublicB2Url(file.name, folderPrefix);
-          successfulUploads.push({ name: file.name, url: publicUrl });
+          const baseUrl = await getPublicB2Url(file.name, folderPrefix);
+          const urlObj = new URL(baseUrl);
+          const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+          const bucketName = pathSegments[0];
+          const objectPath = pathSegments.slice(1).join('/');
+
+          successfulUploads.push({
+            name: file.name,
+            fr: baseUrl,
+            ox: `https://${bucketName}.${urlObj.host}/${objectPath}`,
+            sot: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`
+          });
         }
       } catch (err) { 
-        console.error("Batch upload failed for", file.name, err); 
+        console.error("Batch upload error", file.name, err); 
       }
-      
       clearInterval(interval);
     }
 
@@ -642,7 +650,6 @@ function ImageVault() {
       setUploading(false);
       setUploadProgress(0);
       setRefresh(r => r + 1);
-      
       if (successfulUploads.length > 0) {
         setUploadedBatchLinks(successfulUploads);
       } else {
@@ -651,23 +658,58 @@ function ImageVault() {
     }, 600);
   };
 
-  const handleCopyLink = async (imgName: string, targetAlbum: string) => {
+  const handleCopyMarketplaceLink = async (imgName: string, targetAlbum: string, mp: 'FR' | 'OX' | 'SOT' | 'ALL') => {
     try {
       const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-      const url = await getPublicB2Url(imgName, folderPrefix);
-      await navigator.clipboard.writeText(url);
-      setCopied(imgName);
-      setTimeout(() => setCopied(''), 2000);
+      const baseUrl = await getPublicB2Url(imgName, folderPrefix);
+      const urlObj = new URL(baseUrl);
+      const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+      const bucketName = pathSegments[0];
+      const objectPath = pathSegments.slice(1).join('/');
+      
+      const urls = {
+        FR: baseUrl,
+        OX: `https://${bucketName}.${urlObj.host}/${objectPath}`,
+        SOT: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`
+      };
+      
+      let textToCopy = '';
+      if (mp === 'ALL') {
+        textToCopy = `FR:  ${urls.FR}\nOX:  ${urls.OX}\nSOT: ${urls.SOT}`;
+      } else {
+        textToCopy = urls[mp];
+      }
+
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedKey(`${imgName}_${mp}`);
+      setTimeout(() => setCopiedKey(''), 2000);
     } catch (err) { console.error("Failed to copy", err); }
   };
 
-  const handleCopyAllLinks = async (targetAlbum: string) => {
+  const handleCopyAllLinks = async (targetAlbum: string, mp: 'FR' | 'OX' | 'SOT' | 'ALL') => {
     try {
       const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
       const imagesToCopy = albumData[targetAlbum] || [];
-      const urls = await Promise.all(imagesToCopy.map(img => getPublicB2Url(img.name, folderPrefix)));
-      await navigator.clipboard.writeText(urls.join('\n'));
-      setCopiedAll(true);
+      
+      const urlsToCopy = await Promise.all(imagesToCopy.map(async (img) => {
+        const baseUrl = await getPublicB2Url(img.name, folderPrefix);
+        const urlObj = new URL(baseUrl);
+        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+        const bucketName = pathSegments[0];
+        const objectPath = pathSegments.slice(1).join('/');
+
+        const urls: Record<string, string> = {
+          FR: baseUrl,
+          OX: `https://${bucketName}.${urlObj.host}/${objectPath}`,
+          SOT: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`
+        };
+        
+        if (mp === 'ALL') return `${img.name}:\nFR:  ${urls.FR}\nOX:  ${urls.OX}\nSOT: ${urls.SOT}\n`;
+        return urls[mp];
+      }));
+
+      await navigator.clipboard.writeText(urlsToCopy.join('\n'));
+      setCopiedAll(mp);
       setTimeout(() => setCopiedAll(false), 2000);
     } catch (err) { console.error("Failed to copy all links", err); }
   };
@@ -840,13 +882,26 @@ function ImageVault() {
                         <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                         <img src={imgUrl} alt={imgObj.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                       </div>
-                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                      <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                         {editingImage === uniqueImgKey ? (
                           <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                         ) : (
-                          <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgObj.name.includes('.') ? imgObj.name.substring(0, imgObj.name.lastIndexOf('.')) : imgObj.name); }}><span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div></div>
+                          <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgObj.name.includes('.') ? imgObj.name.substring(0, imgObj.name.lastIndexOf('.')) : imgObj.name); }}>
+                            <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span>
+                            <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
+                          </div>
                         )}
-                        <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgObj.name, imgObj.album)}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
+                        <div className="space-y-1 mt-auto">
+                          <div className="grid grid-cols-3 gap-1">
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'FR')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_FR` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>FR</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'OX')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_OX` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>OX</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'SOT')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_SOT` ? 'bg-emerald-500 text-white' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>SOT</button>
+                          </div>
+                          <div className="flex space-x-1">
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied All!' : 'Copy All 3'}</button>
+                            <button onClick={() => handleDeleteImage(imgObj.name, imgObj.album)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -889,25 +944,50 @@ function ImageVault() {
 
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete</h3></div>
-              <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X className="w-5 h-5" /></button>
+              <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
+              <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-              <p className="text-sm text-slate-600">Successfully processed {uploadedBatchLinks.length} images. You can copy the permanent links below.</p>
-              <div className="space-y-2">
-                {uploadedBatchLinks.map((linkObj, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm group">
-                    <div className="flex flex-col overflow-hidden mr-4"><span className="font-semibold text-slate-800 truncate" title={linkObj.name}>{linkObj.name}</span><span className="text-xs text-slate-500 truncate mt-0.5" title={linkObj.url}>{linkObj.url}</span></div>
-                    <Button variant="outline" className="flex-shrink-0 bg-white" onClick={() => { navigator.clipboard.writeText(linkObj.url); setCopied(linkObj.name); setTimeout(() => setCopied(''), 2000); }}><Link className="w-3 h-3 mr-2" /> {copied === linkObj.name ? 'Copied!' : 'Copy'}</Button>
+              <p className="text-xs text-slate-500">Marketplace links generated for Fuel Rider (FR), OxGord (OX), and SOT:</p>
+              <div className="space-y-3">
+                {uploadedBatchLinks.map((item, i) => (
+                  <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
+                    <span className="font-bold text-slate-800 block truncate">{item.name}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div className="flex items-center justify-between bg-white p-2 rounded border">
+                        <span className="font-semibold text-blue-600">FR:</span>
+                        <button onClick={() => { navigator.clipboard.writeText(item.fr); setCopiedKey(`${item.name}_FR_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-blue-600 font-bold">
+                          {copiedKey === `${item.name}_FR_BATCH` ? 'Copied!' : 'Copy FR'}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between bg-white p-2 rounded border">
+                        <span className="font-semibold text-amber-600">OX:</span>
+                        <button onClick={() => { navigator.clipboard.writeText(item.ox); setCopiedKey(`${item.name}_OX_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-amber-600 font-bold">
+                          {copiedKey === `${item.name}_OX_BATCH` ? 'Copied!' : 'Copy OX'}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between bg-white p-2 rounded border">
+                        <span className="font-semibold text-purple-600">SOT:</span>
+                        <button onClick={() => { navigator.clipboard.writeText(item.sot); setCopiedKey(`${item.name}_SOT_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-purple-600 font-bold">
+                          {copiedKey === `${item.name}_SOT_BATCH` ? 'Copied!' : 'Copy SOT'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
               <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
-              <Button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.url).join('\n')); setCopiedAll(true); setTimeout(() => setCopiedAll(false), 2000); }}><Link className="w-4 h-4 mr-2" /> {copiedAll ? 'Copied All Links!' : 'Copy All Links in Batch'}</Button>
+              <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
+                <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Batch:</span>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.fr).join('\n')); setCopiedAll('BATCH_FR'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_FR' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>FR</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.ox).join('\n')); setCopiedAll('BATCH_OX'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_OX' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>OX</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.sot).join('\n')); setCopiedAll('BATCH_SOT'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_SOT' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>SOT</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nFR: ${l.fr}\nOX: ${l.ox}\nSOT: ${l.sot}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>ALL 3</button>
+              </div>
             </div>
           </div>
         </div>
@@ -964,9 +1044,18 @@ function ImageVault() {
               <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"><span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span><Button variant="outline" className="bg-white text-xs py-1 px-2" onClick={() => setSelectedImages([])}>Cancel</Button><Button className="text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" disabled={isDownloading} onClick={() => handleDownloadZip(selectedImages, `${activeAlbum}_Selection.zip`)}><Download className="w-3 h-3 mr-1.5" /> {isDownloading ? 'Zipping...' : 'Download as ZIP'}</Button></div>
             ) : sortedFilteredImages.length > 0 && <Button variant="outline" onClick={() => setSelectedImages(sortedFilteredImages.map(img => `${activeAlbum}/${img.name}`))} className="bg-white text-xs py-1.5">Select All</Button>}
             {currentImages.length > 0 && <Button variant="outline" onClick={cycleSortOrder} className="bg-white text-xs py-1.5 whitespace-nowrap">{imageSortOrder === 'recent' ? 'Sort: Recent First' : imageSortOrder === 'asc' ? 'Sort: A-Z' : 'Sort: Z-A'}</Button>}
-            {currentImages.length > 0 && <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)} className="bg-white text-xs py-1.5 whitespace-nowrap"><Link className="w-4 h-4 mr-2" />{copiedAll ? 'Copied All!' : 'Copy All Links'}</Button>}
+            {currentImages.length > 0 && (
+              <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
+                <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Album:</span>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, 'FR')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'FR' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>FR</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, 'OX')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'OX' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>OX</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, 'SOT')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'SOT' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>SOT</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, 'ALL')} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>ALL 3</button>
+              </div>
+            )}
           </div>
         </div>
+        
         {currentImages.length > 0 ? (
           sortedFilteredImages.length > 0 ? (
             <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -983,13 +1072,28 @@ function ImageVault() {
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
-                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                    
+                    <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                       {editingImage === uniqueImgKey ? (
                         <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}><p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
+                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
+                          <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                          <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
+                        </div>
                       )}
-                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}><Trash2 className="w-3 h-3" /></Button></div>
+
+                      <div className="space-y-1 mt-auto">
+                        <div className="grid grid-cols-3 gap-1">
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'FR')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_FR` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>FR</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'OX')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_OX` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>OX</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'SOT')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_SOT` ? 'bg-emerald-500 text-white' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>SOT</button>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgName}_ALL` ? 'Copied All!' : 'Copy All 3'}</button>
+                          <button onClick={() => handleDeleteImage(imgName, activeAlbum)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1001,7 +1105,10 @@ function ImageVault() {
     </div>
   );
 }
-// --- MASTERLIST WORKSPACE ---
+
+// ==========================================
+// MODULE: MASTERLIST SCHEMAS
+// ==========================================
 const CATEGORY_SCHEMAS: Record<string, any[]> = {
   wheel_skins: [
     {
@@ -1089,592 +1196,10 @@ const PRODUCT_CATEGORIES = [
   { id: 'grille_inserts', label: 'Grille Inserts', file: 'masterlist_grille_inserts.csv' }
 ];
 
+// ==========================================
+// MODULE: MASTERLIST WORKSPACE
+// ==========================================
 function MasterlistWorkspace() {
-  // --- TAB 6: IMAGE VAULT ---
-function ImageVault() {
-  const [uploading, setUploading] = useState(false);
-  const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const [copied, setCopied] = useState('');
-  const [copiedAll, setCopiedAll] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const imagesWithDetails = useB2FilesWithDetails('images/', refresh);
-
-  const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
-  const [localAlbums, setLocalAlbums] = useState<string[]>([]);
-  const [newAlbumName, setNewAlbumName] = useState('');
-
-  const [albumSearch, setAlbumSearch] = useState('');
-  const [imageSearch, setImageSearch] = useState('');
-  const [imageSortOrder, setImageSortOrder] = useState<'recent' | 'asc' | 'desc'>('recent');
-
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [isDownloading, setIsDownloading] = useState(false); 
-  
-  const [dragMode, setDragMode] = useState<'select' | 'deselect' | null>(null);
-
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatusText, setUploadStatusText] = useState('');
-
-  useEffect(() => {
-    const handleMouseUp = () => setDragMode(null);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
-  }, []);
-
-  const [editingAlbum, setEditingAlbum] = useState<string | null>(null);
-  const [editAlbumText, setEditAlbumText] = useState('');
-  const [editingImage, setEditingImage] = useState<string | null>(null);
-  const [editImageText, setEditImageText] = useState('');
-
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, url: string}[] | null>(null);
-
-  const albumData = useMemo(() => {
-    const data: Record<string, {name: string, date: number}[]> = {};
-    imagesWithDetails.forEach(file => {
-      const parts = file.name.split('/');
-      if (parts.length > 1) {
-        const album = parts[0];
-        const fileName = parts.slice(1).join('/');
-        if (!data[album]) data[album] = [];
-        if (fileName) data[album].push({ name: fileName, date: file.date });
-      } else {
-        const album = 'Uncategorized';
-        if (!data[album]) data[album] = [];
-        if (file.name) data[album].push({ name: file.name, date: file.date });
-      }
-    });
-
-    localAlbums.forEach(la => {
-      if (!data[la]) data[la] = [];
-    });
-
-    return data;
-  }, [imagesWithDetails, localAlbums]);
-
-  const albums = Object.keys(albumData).sort();
-  
-  const filteredAlbums = useMemo(() => {
-    if (!albumSearch.trim()) return albums;
-    const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    return albums.filter(a => {
-      const searchable = a.toLowerCase().replace(/[-_]/g, ' ');
-      return terms.every(term => a.toLowerCase().includes(term) || searchable.includes(term));
-    });
-  }, [albums, albumSearch]);
-
-  const globalFilteredImages = useMemo(() => {
-    if (!albumSearch.trim()) return [];
-    const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    const results: { album: string, name: string, date: number }[] = [];
-    
-    Object.entries(albumData).forEach(([album, imgs]) => {
-      for (const img of imgs) {
-        const searchable = img.name.toLowerCase().replace(/[-_.]/g, ' ');
-        const match = terms.every(term => img.name.toLowerCase().includes(term) || searchable.includes(term));
-        if (match) {
-          results.push({ album, name: img.name, date: img.date });
-        }
-      }
-    });
-    
-    return results.sort((a, b) => {
-      if (imageSortOrder === 'recent') return b.date - a.date;
-      if (imageSortOrder === 'asc') return a.name.localeCompare(b.name);
-      return b.name.localeCompare(a.name);
-    });
-  }, [albumData, albumSearch, imageSortOrder]);
-
-  const handleCreateAlbum = () => {
-    if (!newAlbumName.trim()) return;
-    const name = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
-    if (!localAlbums.includes(name) && !albums.includes(name)) {
-      setLocalAlbums([...localAlbums, name]);
-    }
-    setNewAlbumName('');
-  };
-
-  const handleRenameAlbum = async (oldAlbumName: string) => {
-    if (!editAlbumText.trim() || editAlbumText === oldAlbumName) {
-      setEditingAlbum(null);
-      return;
-    }
-    const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_');
-    if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
-      setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
-      setEditingAlbum(null);
-      return;
-    }
-    setIsDeletingAlbum(true); 
-    const res = await renameAlbumInB2(oldAlbumName, newName);
-    setIsDeletingAlbum(false);
-    if (res.success) {
-      setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
-      setEditingAlbum(null);
-      setRefresh(r => r + 1);
-    } else {
-      alert("Failed to rename album: " + res.error);
-    }
-  };
-
-  const handleDeleteAlbum = async (albumName: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation(); 
-    const imagesInAlbum = albumData[albumName] || [];
-    if (imagesInAlbum.length > 0) {
-      const confirmDelete = window.confirm(`Are you sure you want to delete the album "${albumName}" AND all ${imagesInAlbum.length} images inside it? This cannot be undone.`);
-      if (!confirmDelete) return;
-      setIsDeletingAlbum(true);
-      const folderPrefix = `images/${albumName}/`;
-      for (const img of imagesInAlbum) {
-        await deleteFileFromB2(img.name, folderPrefix);
-      }
-      setIsDeletingAlbum(false);
-    } else {
-      const confirmDelete = window.confirm(`Remove empty album "${albumName}"?`);
-      if (!confirmDelete) return;
-    }
-    setLocalAlbums(prev => prev.filter(a => a !== albumName));
-    if (activeAlbum === albumName) setActiveAlbum(null);
-    setRefresh(r => r + 1);
-  };
-
-  const handleRenameImage = async (oldName: string, targetAlbum: string) => {
-    if (!editImageText.trim() || editImageText === oldName) {
-      setEditingImage(null);
-      return;
-    }
-    const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
-    let newName = editImageText.trim().replace(/[^a-zA-Z0-9-_ \.\(\)]/g, '_');
-    if (oldExt && !newName.endsWith(`.${oldExt}`)) {
-      newName += `.${oldExt}`;
-    }
-    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-    setUploading(true);
-    const res = await renameImageInB2(oldName, newName, folderPrefix);
-    setUploading(false);
-    if (res.success) {
-      setEditingImage(null);
-      setRefresh(r => r + 1);
-    } else {
-      alert("Failed to rename image: " + res.error);
-    }
-  };
-
-  const handleQueueFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setPendingFiles(prev => [...prev, ...files]);
-  };
-
-  const handleBatchUpload = async () => {
-    if (pendingFiles.length === 0 || !activeAlbum) return;
-    
-    setUploading(true);
-    setUploadProgress(0);
-    
-    const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
-    const successfulUploads: {name: string, url: string}[] = [];
-    const totalFiles = pendingFiles.length;
-
-    for (let i = 0; i < totalFiles; i++) {
-      const file = pendingFiles[i];
-      
-      setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${file.name}`);
-      const baseProgress = (i / totalFiles) * 100;
-      setUploadProgress(baseProgress);
-      
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          const maxForThisFile = ((i + 1) / totalFiles) * 100 - 2;
-          if (prev >= maxForThisFile) return prev;
-          return prev + 2;
-        });
-      }, 150);
-
-      try {
-        const contentType = file.type || 'application/octet-stream';
-        const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
-        const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
-        if (res.ok) {
-          const publicUrl = await getPublicB2Url(file.name, folderPrefix);
-          successfulUploads.push({ name: file.name, url: publicUrl });
-        }
-      } catch (err) { 
-        console.error("Batch upload failed for", file.name, err); 
-      }
-      
-      clearInterval(interval);
-    }
-
-    setUploadProgress(100);
-    setUploadStatusText('Finalizing batch...');
-
-    setTimeout(() => {
-      setPendingFiles([]);
-      setUploading(false);
-      setUploadProgress(0);
-      setRefresh(r => r + 1);
-      
-      if (successfulUploads.length > 0) {
-        setUploadedBatchLinks(successfulUploads);
-      } else {
-        alert("Upload failed. Please check your network connection and try again.");
-      }
-    }, 600);
-  };
-
-  const handleCopyLink = async (imgName: string, targetAlbum: string) => {
-    try {
-      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-      const url = await getPublicB2Url(imgName, folderPrefix);
-      await navigator.clipboard.writeText(url);
-      setCopied(imgName);
-      setTimeout(() => setCopied(''), 2000);
-    } catch (err) { console.error("Failed to copy", err); }
-  };
-
-  const handleCopyAllLinks = async (targetAlbum: string) => {
-    try {
-      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-      const imagesToCopy = albumData[targetAlbum] || [];
-      const urls = await Promise.all(imagesToCopy.map(img => getPublicB2Url(img.name, folderPrefix)));
-      await navigator.clipboard.writeText(urls.join('\n'));
-      setCopiedAll(true);
-      setTimeout(() => setCopiedAll(false), 2000);
-    } catch (err) { console.error("Failed to copy all links", err); }
-  };
-
-  const handleDeleteImage = async (imgName: string, targetAlbum: string) => {
-    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-    await deleteFileFromB2(imgName, folderPrefix);
-    setRefresh(r => r + 1);
-  };
-
-  const cycleSortOrder = () => {
-    if (imageSortOrder === 'recent') setImageSortOrder('asc');
-    else if (imageSortOrder === 'asc') setImageSortOrder('desc');
-    else setImageSortOrder('recent');
-  };
-
-  const handleDownloadZip = async (imageKeys: string[], zipName: string) => {
-    if (imageKeys.length === 0) return;
-    setIsDownloading(true);
-
-    try {
-      const zip = new JSZip();
-
-      for (const uniqueKey of imageKeys) {
-        const parts = uniqueKey.split('/');
-        const album = parts[0];
-        const name = parts.slice(1).join('/');
-        const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
-
-        const proxyUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(name)}`;
-        const res = await fetch(proxyUrl);
-        const blob = await res.blob();
-        
-        zip.file(name, blob);
-      }
-
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = window.URL.createObjectURL(content);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = zipName;
-      document.body.appendChild(link);
-      link.click();
-      window.URL.revokeObjectURL(url);
-      link.remove();
-      
-    } catch (err) {
-      console.error("Zip download failed", err);
-      alert("Failed to create ZIP file. Ensure JSZip is installed correctly.");
-    }
-    
-    setIsDownloading(false);
-    setSelectedImages([]); 
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, key: string, isSelected: boolean) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    const newMode = isSelected ? 'deselect' : 'select';
-    setDragMode(newMode);
-    if (newMode === 'select') setSelectedImages(prev => [...prev, key]);
-    else setSelectedImages(prev => prev.filter(k => k !== key));
-  };
-
-  const handleMouseEnter = (key: string, isSelected: boolean) => {
-    if (dragMode === 'select' && !isSelected) setSelectedImages(prev => [...prev, key]);
-    else if (dragMode === 'deselect' && isSelected) setSelectedImages(prev => prev.filter(k => k !== key));
-  };
-
-  if (!activeAlbum) {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500 relative">
-        {expandedImage && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
-            <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]">
-                <X className="w-6 h-6" />
-              </button>
-              <img src={expandedImage} alt="Expanded View" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
-            </div>
-          </div>
-        )}
-
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
-          <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
-        </div>
-
-        <Card className="p-6">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-            <h3 className="text-lg font-semibold text-slate-800">Your Albums</h3>
-            <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full lg:w-auto">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-                <input type="text" placeholder="Search albums and images globally..." value={albumSearch} onChange={e => { setAlbumSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-              </div>
-              <div className="flex items-center space-x-2 w-full sm:w-auto">
-                <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48" />
-                <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
-              </div>
-            </div>
-          </div>
-
-          {albums.length > 0 ? (
-            filteredAlbums.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredAlbums.map(album => {
-                  const previewImage = albumData[album]?.[0]?.name;
-                  const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
-                  return (
-                    <Card key={album} onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); setSelectedImages([]); } }} className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}>
-                      {album !== 'Uncategorized' && (
-                        <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }} className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full shadow-sm" title="Rename Album"><Edit3 className="w-4 h-4" /></button>
-                          <button onClick={(e) => handleDeleteAlbum(album, e)} className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full shadow-sm" title="Delete Album"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      )}
-                      <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
-                        {previewImage ? (
-                          <img src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(previewImage)}`} alt={`Preview of ${album}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                        ) : <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />}
-                      </div>
-                      <div className="p-4 text-center bg-white">
-                        {editingAlbum === album ? (
-                          <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
-                            <input autoFocus type="text" className="w-full text-sm border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editAlbumText} onChange={e => setEditAlbumText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameAlbum(album); if(e.key === 'Escape') setEditingAlbum(null); }} />
-                            <button onClick={() => handleRenameAlbum(album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-4 h-4"/></button>
-                            <button onClick={() => setEditingAlbum(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-4 h-4"/></button>
-                          </div>
-                        ) : (
-                          <><h4 className="font-semibold text-slate-800 break-words truncate" title={album}>{album}</h4><p className="text-xs text-slate-500 mt-1">{albumData[album].length} images</p></>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No albums match "{albumSearch}".</div>
-          ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg">No albums yet. Create one above to get started.</div>}
-        </Card>
-
-        {albumSearch.trim() && (
-          <Card className="p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-              <div className="flex items-center space-x-3"><h3 className="text-lg font-semibold text-slate-800">Global Image Results</h3><span className="text-sm font-medium text-slate-500">{globalFilteredImages.length} found</span></div>
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {selectedImages.length > 0 ? (
-                  <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200">
-                    <span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span>
-                    <Button variant="outline" className="bg-white text-xs py-1 px-2" onClick={() => setSelectedImages([])}>Cancel</Button>
-                    <Button className="text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" disabled={isDownloading} onClick={() => handleDownloadZip(selectedImages, 'Global_Search_Images.zip')}><Download className="w-3 h-3 mr-1.5" /> {isDownloading ? 'Zipping...' : 'Download as ZIP'}</Button>
-                  </div>
-                ) : globalFilteredImages.length > 0 && <Button variant="outline" onClick={() => setSelectedImages(globalFilteredImages.map(img => `${img.album}/${img.name}`))} className="bg-white text-xs py-1.5">Select All</Button>}
-                {globalFilteredImages.length > 0 && <Button variant="outline" onClick={cycleSortOrder} className="bg-white text-xs py-1.5 whitespace-nowrap">{imageSortOrder === 'recent' ? 'Sort: Recent First' : imageSortOrder === 'asc' ? 'Sort: A-Z' : 'Sort: Z-A'}</Button>}
-              </div>
-            </div>
-            {globalFilteredImages.length > 0 ? (
-              <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                {globalFilteredImages.map(imgObj => {
-                  const folderPrefix = imgObj.album === 'Uncategorized' ? 'images/' : `images/${imgObj.album}/`;
-                  const uniqueImgKey = `${imgObj.album}/${imgObj.name}`;
-                  const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgObj.name)}`;
-                  const isSelected = selectedImages.includes(uniqueImgKey);
-                  return (
-                    <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
-                      <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                        <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" /></div>
-                        <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
-                        <img src={imgUrl} alt={imgObj.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
-                      </div>
-                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
-                        {editingImage === uniqueImgKey ? (
-                          <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
-                        ) : (
-                          <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgObj.name.includes('.') ? imgObj.name.substring(0, imgObj.name.lastIndexOf('.')) : imgObj.name); }}><span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span><div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div></div>
-                        )}
-                        <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgObj.name, imgObj.album)}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images contain "{albumSearch}".</div>}
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  const currentImages = albumData[activeAlbum] || [];
-  const sortedFilteredImages = (() => {
-    let imgs = [...currentImages];
-    if (imageSearch.trim()) {
-      const terms = imageSearch.toLowerCase().split(/\s+/).filter(Boolean);
-      imgs = imgs.filter(img => {
-        const searchable = img.name.toLowerCase().replace(/[-_.]/g, ' ');
-        return terms.every(term => img.name.toLowerCase().includes(term) || searchable.includes(term));
-      });
-    }
-    return imgs.sort((a, b) => {
-      if (imageSortOrder === 'recent') return b.date - a.date;
-      if (imageSortOrder === 'asc') return a.name.localeCompare(b.name);
-      return b.name.localeCompare(a.name);
-    });
-  })();
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 relative">
-      {expandedImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
-          <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]"><X className="w-6 h-6" /></button>
-            <img src={expandedImage} alt="Expanded View" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
-          </div>
-        </div>
-      )}
-
-      {uploadedBatchLinks && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete</h3></div>
-              <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-              <p className="text-sm text-slate-600">Successfully processed {uploadedBatchLinks.length} images. You can copy the permanent links below.</p>
-              <div className="space-y-2">
-                {uploadedBatchLinks.map((linkObj, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm group">
-                    <div className="flex flex-col overflow-hidden mr-4"><span className="font-semibold text-slate-800 truncate" title={linkObj.name}>{linkObj.name}</span><span className="text-xs text-slate-500 truncate mt-0.5" title={linkObj.url}>{linkObj.url}</span></div>
-                    <Button variant="outline" className="flex-shrink-0 bg-white" onClick={() => { navigator.clipboard.writeText(linkObj.url); setCopied(linkObj.name); setTimeout(() => setCopied(''), 2000); }}><Link className="w-3 h-3 mr-2" /> {copied === linkObj.name ? 'Copied!' : 'Copy'}</Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
-              <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
-              <Button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.url).join('\n')); setCopiedAll(true); setTimeout(() => setCopiedAll(false), 2000); }}><Link className="w-4 h-4 mr-2" /> {copiedAll ? 'Copied All Links!' : 'Copy All Links in Batch'}</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); setSelectedImages([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-slate-600" /></button>
-          <div><h2 className="text-2xl font-bold text-slate-900">{activeAlbum}</h2><p className="text-slate-500 mt-1">Manage images in this album.</p></div>
-        </div>
-        <div className="flex items-center space-x-3">
-          {currentImages.length > 0 && <Button variant="outline" onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)} disabled={isDownloading} className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}</Button>}
-          {activeAlbum !== 'Uncategorized' && <Button variant="danger" onClick={() => handleDeleteAlbum(activeAlbum)} disabled={isDeletingAlbum}><Trash2 className="w-4 h-4 mr-2" /> {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}</Button>}
-        </div>
-      </div>
-
-      <Card className="p-6">
-        <h3 className="font-semibold text-slate-800 mb-4">Stage Files for Upload</h3>
-        <div className={`border-2 border-dashed border-slate-300 rounded-xl transition-colors ${uploading ? 'bg-slate-50' : 'hover:bg-slate-100 cursor-pointer'}`}>
-          {uploading ? (
-            <div className="p-8 flex flex-col items-center justify-center min-h-[160px]">
-              <UploadCloud className="w-10 h-10 mb-4 text-blue-600 animate-bounce" />
-              <p className="font-semibold text-slate-700 text-sm mb-1">{uploadStatusText}</p>
-              <div className="w-full max-w-md mt-4 animate-in slide-in-from-bottom-2 fade-in">
-                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.min(uploadProgress, 100)}%` }} /></div>
-                <div className="flex justify-between mt-2 text-[10px] text-slate-500 font-bold uppercase tracking-wider"><span>{uploadProgress >= 100 ? 'Complete' : 'Uploading...'}</span><span>{Math.round(Math.min(uploadProgress, 100))}%</span></div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-8 flex flex-col items-center justify-center" onClick={() => fileInputRef.current?.click()}><UploadCloud className="w-10 h-10 text-blue-500 mb-3" /><p className="text-slate-700 font-medium">Click to select files</p><p className="text-xs text-slate-500 mt-1">Files will be queued below before uploading</p><input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/></div>
-          )}
-        </div>
-        {!uploading && pendingFiles.length > 0 && (
-          <div className="mt-6 space-y-4 animate-in fade-in">
-            <div className="flex justify-between items-center border-b pb-2"><h4 className="text-sm font-semibold text-slate-700">{pendingFiles.length} files queued</h4><Button onClick={handleBatchUpload}>Upload Batch</Button></div>
-            <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
-              {pendingFiles.map((f, i) => (
-                <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-200 text-sm">
-                  <div className="flex items-center space-x-2 truncate"><ImageIcon className="w-4 h-4 text-slate-400 flex-shrink-0" /><span className="truncate">{f.name}</span><span className="text-xs text-slate-400">({(f.size / 1024).toFixed(1)} KB)</span></div>
-                  <button onClick={() => setPendingFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-1 hover:bg-red-100 rounded text-red-500 transition-colors"><X className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <Card className="p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div className="flex items-center space-x-3"><h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3><span className="text-sm font-medium text-slate-500">{sortedFilteredImages.length} items</span></div>
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {currentImages.length > 0 && <div className="relative w-full sm:w-64 mr-2"><Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" /><input type="text" placeholder="Find image..." value={imageSearch} onChange={e => { setImageSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-1.5 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>}
-            {selectedImages.length > 0 ? (
-              <div className="flex items-center space-x-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"><span className="text-sm font-semibold text-blue-800">{selectedImages.length} selected</span><Button variant="outline" className="bg-white text-xs py-1 px-2" onClick={() => setSelectedImages([])}>Cancel</Button><Button className="text-xs py-1 px-3 bg-blue-600 hover:bg-blue-700" disabled={isDownloading} onClick={() => handleDownloadZip(selectedImages, `${activeAlbum}_Selection.zip`)}><Download className="w-3 h-3 mr-1.5" /> {isDownloading ? 'Zipping...' : 'Download as ZIP'}</Button></div>
-            ) : sortedFilteredImages.length > 0 && <Button variant="outline" onClick={() => setSelectedImages(sortedFilteredImages.map(img => `${activeAlbum}/${img.name}`))} className="bg-white text-xs py-1.5">Select All</Button>}
-            {currentImages.length > 0 && <Button variant="outline" onClick={cycleSortOrder} className="bg-white text-xs py-1.5 whitespace-nowrap">{imageSortOrder === 'recent' ? 'Sort: Recent First' : imageSortOrder === 'asc' ? 'Sort: A-Z' : 'Sort: Z-A'}</Button>}
-            {currentImages.length > 0 && <Button variant="outline" onClick={() => handleCopyAllLinks(activeAlbum)} className="bg-white text-xs py-1.5 whitespace-nowrap"><Link className="w-4 h-4 mr-2" />{copiedAll ? 'Copied All!' : 'Copy All Links'}</Button>}
-          </div>
-        </div>
-        {currentImages.length > 0 ? (
-          sortedFilteredImages.length > 0 ? (
-            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-              {sortedFilteredImages.map(imgObj => {
-                const imgName = imgObj.name;
-                const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
-                const uniqueImgKey = `${activeAlbum}/${imgName}`;
-                const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`;
-                const isSelected = selectedImages.includes(uniqueImgKey);
-                return (
-                  <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
-                    <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none" /></div>
-                      <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
-                      <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
-                    </div>
-                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
-                      {editingImage === uniqueImgKey ? (
-                        <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}><p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
-                      )}
-                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyLink(imgName, activeAlbum)}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum)}><Trash2 className="w-3 h-3" /></Button></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
-        ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">Album is empty. Queue and upload files above.</div>}
-      </Card>
-    </div>
-  );
-}
-
-// --- CONSTANTS: SCHEMAS & TABS ---
   const [activeCategory, setActiveCategory] = useState(PRODUCT_CATEGORIES[0].id);
   const [dataCache, setDataCache] = useState<Record<string, any[]>>({});
   const [searchQuery, setSearchQuery] = useState('');

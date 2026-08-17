@@ -173,6 +173,28 @@ export async function getPublicB2Url(fileName: string, folder: string) {
   return `${endpoint}/${bucket}/${safePath}`;
 }
 
+// ==========================================
+// 🛍️ NEW: MARKETPLACE MULTI-LINK GENERATOR
+// ==========================================
+export async function getMarketplaceImageUrls(fileName: string, folder: string) {
+  const rawUrl = await getPublicB2Url(fileName, folder);
+
+  // Checks for optional custom domain environment variables; falls back to raw query params
+  const frBase = process.env.FR_IMAGE_BASE_URL;
+  const oxBase = process.env.OX_IMAGE_BASE_URL;
+  const sotBase = process.env.SOT_IMAGE_BASE_URL;
+
+  const fullPath = `${folder}${fileName}`;
+  const safePath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+
+  return {
+    fr: frBase ? `${frBase}/${safePath}` : `${rawUrl}?mp=FR`,
+    ox: oxBase ? `${oxBase}/${safePath}` : `${rawUrl}?mp=OX`,
+    sot: sotBase ? `${sotBase}/${safePath}` : `${rawUrl}?mp=SOT`,
+    raw: rawUrl
+  };
+}
+
 export async function getPresignedUploadUrl(fileName: string, folder: string, contentType: string) {
   const { client, bucket } = getS3Target(folder);
   const command = new PutObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}`, ContentType: contentType });
