@@ -430,9 +430,9 @@ function ImageVault() {
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
   
-  // 🔥 New category state for album creation
   const [newAlbumName, setNewAlbumName] = useState('');
-  const [newAlbumCategory, setNewAlbumCategory] = useState('None');
+  const [newAlbumCategory, setNewAlbumCategory] = useState(''); 
+  const [albumCategoryFilter, setAlbumCategoryFilter] = useState('All');
 
   const [albumSearch, setAlbumSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
@@ -483,7 +483,6 @@ function ImageVault() {
 
   const albums = Object.keys(albumData).sort();
 
-  // Helper to generate the two precise link formats
   const getDualLinks = async (imgName: string, targetAlbum: string) => {
     const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
     const baseUrl = await getPublicB2Url(imgName, folderPrefix);
@@ -588,13 +587,19 @@ function ImageVault() {
   };
 
   const filteredAlbums = useMemo(() => {
-    if (!albumSearch.trim()) return albums;
-    const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
-    return albums.filter(a => {
-      const searchable = a.toLowerCase().replace(/[-_]/g, ' ');
-      return terms.every(term => a.toLowerCase().includes(term) || searchable.includes(term));
-    });
-  }, [albums, albumSearch]);
+    let filtered = albums;
+    if (albumCategoryFilter !== 'All') {
+      filtered = filtered.filter(a => a.startsWith(`[${albumCategoryFilter}]`));
+    }
+    if (albumSearch.trim()) {
+      const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
+      filtered = filtered.filter(a => {
+        const searchable = a.toLowerCase().replace(/[-_\[\]]/g, ' ');
+        return terms.every(term => searchable.includes(term));
+      });
+    }
+    return filtered;
+  }, [albums, albumSearch, albumCategoryFilter]);
 
   const globalFilteredImages = useMemo(() => {
     if (!albumSearch.trim()) return [];
@@ -602,6 +607,9 @@ function ImageVault() {
     const results: { album: string, name: string, date: number }[] = [];
     
     Object.entries(albumData).forEach(([album, imgs]) => {
+      if (albumCategoryFilter !== 'All' && !album.startsWith(`[${albumCategoryFilter}]`)) {
+        return;
+      }
       for (const img of imgs) {
         const searchable = img.name.toLowerCase().replace(/[-_.]/g, ' ');
         const match = terms.every(term => img.name.toLowerCase().includes(term) || searchable.includes(term));
@@ -616,17 +624,17 @@ function ImageVault() {
       if (imageSortOrder === 'asc') return a.name.localeCompare(b.name);
       return b.name.localeCompare(a.name);
     });
-  }, [albumData, albumSearch, imageSortOrder]);
+  }, [albumData, albumSearch, imageSortOrder, albumCategoryFilter]);
 
   const handleCreateAlbum = () => {
-    if (!newAlbumName.trim()) return;
+    if (!newAlbumName.trim() || !newAlbumCategory) return;
     const cleanName = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
     const finalName = newAlbumCategory === 'None' ? cleanName : `[${newAlbumCategory}] ${cleanName}`;
     if (!localAlbums.includes(finalName) && !albums.includes(finalName)) {
       setLocalAlbums([...localAlbums, finalName]);
     }
     setNewAlbumName('');
-    setNewAlbumCategory('None');
+    setNewAlbumCategory(''); 
   };
 
   const handleRenameAlbum = async (oldAlbumName: string) => {
@@ -780,26 +788,35 @@ function ImageVault() {
 
         <Card className="p-6">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-            <h3 className="text-lg font-semibold text-slate-800">Your Albums</h3>
+            
             <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full lg:w-auto">
-              <div className="relative w-full sm:w-80">
+              <h3 className="text-lg font-semibold text-slate-800 mr-2">Your Albums</h3>
+              <select value={albumCategoryFilter} onChange={e => setAlbumCategoryFilter(e.target.value)} className="border border-slate-300 p-2 rounded-md text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium text-slate-700 w-full sm:w-auto">
+                <option value="All">All Categories</option>
+                <option value="FR">FR</option>
+                <option value="OX">OX</option>
+                <option value="SOT">SOT</option>
+                <option value="MUA">MUA</option>
+              </select>
+              <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-                <input type="text" placeholder="Search albums and images globally..." value={albumSearch} onChange={e => { setAlbumSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-              </div>
-              
-              {/* 🔥 ALBUM CREATION W/ CATEGORY DROP DOWN */}
-              <div className="flex items-center space-x-2 w-full sm:w-auto">
-                <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-2 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all">
-                  <option value="None">No Category</option>
-                  <option value="FR">FR</option>
-                  <option value="OX">OX</option>
-                  <option value="SOT">SOT</option>
-                  <option value="MUA">MUA</option>
-                </select>
-                <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48" />
-                <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+                <input type="text" placeholder="Search albums globally..." value={albumSearch} onChange={e => { setAlbumSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
               </div>
             </div>
+
+            <div className="flex items-center space-x-2 w-full sm:w-auto bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+              <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all w-32">
+                <option value="" disabled>Category...</option>
+                <option value="None">No Category</option>
+                <option value="FR">FR</option>
+                <option value="OX">OX</option>
+                <option value="SOT">SOT</option>
+                <option value="MUA">MUA</option>
+              </select>
+              <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-48 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+              <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum || !newAlbumCategory || !newAlbumName.trim()}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+            </div>
+
           </div>
 
           {albums.length > 0 ? (
@@ -934,7 +951,7 @@ function ImageVault() {
       {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
@@ -963,7 +980,8 @@ function ImageVault() {
                 ))}
               </div>
             </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
               <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
               <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Batch:</span>
@@ -971,6 +989,7 @@ function ImageVault() {
                 <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.link2).join('\n')); setCopiedAll('BATCH_2'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_2' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 2s</button>
                 <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nL1: ${l.link1}\nL2: ${l.link2}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Both Links</button>
               </div>
+            </div>
             </div>
           </div>
         </div>
@@ -1598,7 +1617,7 @@ function MasterCatalog() {
   };
 
   const handleSaveEditor = async () => {
-    if (!editFile) return;
+    if (!editFile) return alert("Please select a file.");
     const coreCols = ["asin", "brand", "title", "list_price", "bullet_point_1"];
     const records = editableRows.map(row => {
       const rawData: Record<string, string> = {};
@@ -2048,8 +2067,8 @@ function AdsAnalysis() {
   const [rawColFilters, setRawColFilters] = useState<Record<string, string>>({});
 
   const [sortConfigs, setSortConfigs] = useState<Record<string, {key: string, dir: 'asc'|'desc'}>>({
-    campaigns: { key: 'Sales', dir: 'desc' },
-    adgroups: { key: 'Sales', dir: 'desc' },
+    campaigns: { key: '7 Day Total Sales', dir: 'desc' },
+    adgroups: { key: '7 Day Total Sales', dir: 'desc' },
     terms: { key: 'Spend', dir: 'desc' },
     raw: { key: '', dir: 'asc' }
   });
@@ -2158,28 +2177,61 @@ function AdsAnalysis() {
     };
   }, [filteredData]);
 
+  const ADS_HEADERS = [
+    "Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", 
+    "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", 
+    "Customer Search Term", "Impressions", "Clicks", "Click-Thru Rate (CTR)", 
+    "Cost Per Click (CPC)", "Spend", "7 Day Total Sales", 
+    "Total Advertising Cost of Sales (ACOS)", "Total Return on Advertising Spend (ROAS)", 
+    "7 Day Total Orders (#)", "7 Day Total Units (#)", "7 Day Conversion Rate", 
+    "7 Day Advertised SKU Units (#)", "7 Day Other SKU Units (#)", 
+    "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
+  ];
+
   const aggregateGroup = (groupByKey: string, limit: number, sortBySales = true) => {
     const map = new Map<string, any>();
     filteredData.forEach(row => {
       const keyVal = row[groupByKey] || row[groupByKey.toLowerCase()] || 'Unknown';
-      if (!map.has(keyVal)) map.set(keyVal, { Spend: 0, Sales: 0, Orders: 0, Impressions: 0, Clicks: 0, Units: 0 });
+      if (!map.has(keyVal)) {
+        const initObj: any = {};
+        ADS_HEADERS.forEach(h => {
+          if (["Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", "Customer Search Term"].includes(h)) {
+            initObj[h] = row[h] || row[h.toLowerCase()] || '';
+          } else {
+            initObj[h] = 0; 
+          }
+        });
+        map.set(keyVal, initObj);
+      }
+      
       const item = map.get(keyVal)!;
-      item.Spend += parseNum(row['Spend'] || row['spend']);
-      item.Sales += parseNum(row['7 Day Total Sales'] || row['sales']);
-      item.Orders += parseNum(row['7 Day Total Orders (#)'] || row['orders']);
-      item.Impressions += parseNum(row['Impressions'] || row['impressions']);
-      item.Clicks += parseNum(row['Clicks'] || row['clicks']);
+      item['Impressions'] += parseNum(row['Impressions']);
+      item['Clicks'] += parseNum(row['Clicks']);
+      item['Spend'] += parseNum(row['Spend']);
+      item['7 Day Total Sales'] += parseNum(row['7 Day Total Sales'] || row['Sales']);
+      item['7 Day Total Orders (#)'] += parseNum(row['7 Day Total Orders (#)'] || row['Orders']);
+      item['7 Day Total Units (#)'] += parseNum(row['7 Day Total Units (#)']);
+      item['7 Day Advertised SKU Units (#)'] += parseNum(row['7 Day Advertised SKU Units (#)']);
+      item['7 Day Other SKU Units (#)'] += parseNum(row['7 Day Other SKU Units (#)']);
+      item['7 Day Advertised SKU Sales'] += parseNum(row['7 Day Advertised SKU Sales']);
+      item['7 Day Other SKU Sales'] += parseNum(row['7 Day Other SKU Sales']);
     });
 
-    return Array.from(map.entries()).map(([name, data]) => ({
-      Name: name, Impressions: data.Impressions, Clicks: data.Clicks,
-      CTR: data.Impressions > 0 ? (data.Clicks / data.Impressions) * 100 : 0,
-      CPC: data.Clicks > 0 ? data.Spend / data.Clicks : 0,
-      Spend: data.Spend, Sales: data.Sales,
-      ACOS: data.Sales > 0 ? (data.Spend / data.Sales) * 100 : 0,
-      ROAS: data.Spend > 0 ? data.Sales / data.Spend : 0,
-      Orders: data.Orders, CVR: data.Clicks > 0 ? (data.Orders / data.Clicks) * 100 : 0
-    })).slice(0, limit);
+    return Array.from(map.entries()).map(([name, data]) => {
+      const imps = data['Impressions'];
+      const clicks = data['Clicks'];
+      const spend = data['Spend'];
+      const sales = data['7 Day Total Sales'];
+      const orders = data['7 Day Total Orders (#)'];
+
+      data['Click-Thru Rate (CTR)'] = imps > 0 ? (clicks / imps) * 100 : 0;
+      data['Cost Per Click (CPC)'] = clicks > 0 ? spend / clicks : 0;
+      data['Total Advertising Cost of Sales (ACOS)'] = sales > 0 ? (spend / sales) * 100 : 0;
+      data['Total Return on Advertising Spend (ROAS)'] = spend > 0 ? sales / spend : 0;
+      data['7 Day Conversion Rate'] = clicks > 0 ? (orders / clicks) * 100 : 0;
+
+      return data;
+    }).sort((a, b) => sortBySales ? b['7 Day Total Sales'] - a['7 Day Total Sales'] : b['Spend'] - a['Spend']).slice(0, limit);
   };
 
   const topCampaignsRaw = useMemo(() => aggregateGroup('Campaign Name', cRowLimit, true), [filteredData, cRowLimit]);
@@ -2214,7 +2266,15 @@ function AdsAnalysis() {
     return Array.from(set).sort();
   }, [rawAdRows]);
 
-  const leaderboardHeaders = ['Name', 'Impressions', 'Clicks', 'CTR', 'CPC', 'Spend', 'Sales', 'ACOS', 'ROAS', 'Orders', 'CVR'];
+  const renderAdValue = (col: string, val: any) => {
+    if (typeof val === 'number') {
+      if (col.includes('Rate') || col.includes('(CTR)') || col.includes('(ACOS)')) return `${val.toFixed(2)}%`;
+      if (col.includes('Spend') || col.includes('Sales') || col.includes('(CPC)')) return `$${val.toFixed(2)}`;
+      if (col.includes('ROAS')) return val.toFixed(2);
+      return val.toLocaleString();
+    }
+    return val;
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -2321,16 +2381,16 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('campaigns', col)}>
                                 <div className="flex items-center">
-                                  {col === 'Name' ? 'Campaign Name' : col} <SortIcon table="campaigns" colKey={col} />
+                                  {col} <SortIcon table="campaigns" colKey={col} />
                                 </div>
                               </th>
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={campaignColFilters[col] || ''} onChange={e => setCampaignColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2340,7 +2400,9 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedCampaigns.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2">${r.Spend.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
+                              {ADS_HEADERS.map(col => (
+                                <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
@@ -2358,16 +2420,16 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('adgroups', col)}>
                                 <div className="flex items-center">
-                                  {col === 'Name' ? 'Ad Group Name' : col} <SortIcon table="adgroups" colKey={col} />
+                                  {col} <SortIcon table="adgroups" colKey={col} />
                                 </div>
                               </th>
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={adGroupColFilters[col] || ''} onChange={e => setAdGroupColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2377,7 +2439,9 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedAdGroups.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2">${r.Spend.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
+                              {ADS_HEADERS.map(col => (
+                                <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
@@ -2395,16 +2459,16 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('terms', col)}>
                                 <div className="flex items-center">
-                                  {col === 'Name' ? 'Customer Search Term' : col} <SortIcon table="terms" colKey={col} />
+                                  {col} <SortIcon table="terms" colKey={col} />
                                 </div>
                               </th>
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {leaderboardHeaders.map(col => (
+                            {ADS_HEADERS.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={termColFilters[col] || ''} onChange={e => setTermColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2414,7 +2478,9 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedTerms.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              <td className="p-2 font-medium">{r.Name}</td><td className="p-2">{r.Impressions.toLocaleString()}</td><td className="p-2">{r.Clicks.toLocaleString()}</td><td className="p-2">{r.CTR.toFixed(2)}%</td><td className="p-2">${r.CPC.toFixed(2)}</td><td className="p-2 font-semibold text-slate-900">${r.Spend.toFixed(2)}</td><td className="p-2">${r.Sales.toFixed(2)}</td><td className="p-2 text-amber-700">{r.ACOS.toFixed(1)}%</td><td className="p-2">{r.ROAS.toFixed(2)}</td><td className="p-2">{r.Orders}</td><td className="p-2 text-emerald-700">{r.CVR.toFixed(1)}%</td>
+                              {ADS_HEADERS.map(col => (
+                                <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
+                              ))}
                             </tr>
                           ))}
                         </tbody>
@@ -2434,7 +2500,7 @@ function AdsAnalysis() {
                     <table className="w-full text-xs text-left whitespace-nowrap">
                       <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
                         <tr>
-                          {Object.keys(filteredData[0] || {}).map(k => (
+                          {ADS_HEADERS.map(k => (
                             <th key={k} className="p-2 text-slate-700 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('raw', k)}>
                               <div className="flex items-center">
                                 {k} <SortIcon table="raw" colKey={k} />
@@ -2443,7 +2509,7 @@ function AdsAnalysis() {
                           ))}
                         </tr>
                         <tr className="bg-slate-100">
-                          {Object.keys(filteredData[0] || {}).map(k => (
+                          {ADS_HEADERS.map(k => (
                             <th key={`filter-${k}`} className="p-1 border-t border-slate-200">
                               <input 
                                 type="text" 
@@ -2458,7 +2524,11 @@ function AdsAnalysis() {
                       </thead>
                       <tbody className="divide-y">
                         {sortedRawData.slice(0, 200).map((row, i) => (
-                          <tr key={i} className="hover:bg-slate-50">{Object.values(row).map((v: any, j) => <td key={j} className="p-2">{v}</td>)}</tr>
+                          <tr key={i} className="hover:bg-slate-50">
+                            {ADS_HEADERS.map(k => (
+                              <td key={k} className="p-2 truncate max-w-[200px]">{row[k] !== undefined ? row[k] : ''}</td>
+                            ))}
+                          </tr>
                         ))}
                       </tbody>
                     </table>
