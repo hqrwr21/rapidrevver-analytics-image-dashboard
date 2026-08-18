@@ -415,7 +415,7 @@ function DataIngestion() {
 }
 
 // ==========================================
-// TAB 6: IMAGE VAULT (WITH 4 MARKETPLACES: FR, OX, SOT, MUA)
+// TAB 6: IMAGE VAULT (WITH CORE LINKS + CATEGORY)
 // ==========================================
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
@@ -429,7 +429,10 @@ function ImageVault() {
 
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
+  
+  // 🔥 New category state for album creation
   const [newAlbumName, setNewAlbumName] = useState('');
+  const [newAlbumCategory, setNewAlbumCategory] = useState('None');
 
   const [albumSearch, setAlbumSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
@@ -450,7 +453,7 @@ function ImageVault() {
   const [editImageText, setEditImageText] = useState('');
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, fr: string, ox: string, sot: string, mua: string}[] | null>(null);
+  const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
   useEffect(() => {
     const handleMouseUp = () => setDragMode(null);
@@ -480,29 +483,30 @@ function ImageVault() {
 
   const albums = Object.keys(albumData).sort();
 
-  const handleCopyMarketplaceLink = async (imgName: string, targetAlbum: string, mp: 'FR' | 'OX' | 'SOT' | 'MUA' | 'ALL') => {
+  // Helper to generate the two precise link formats
+  const getDualLinks = async (imgName: string, targetAlbum: string) => {
+    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
+    const baseUrl = await getPublicB2Url(imgName, folderPrefix);
+    const urlObj = new URL(baseUrl);
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+    const bucketName = pathSegments[0] || 'rapid-revver';
+    const objectPath = pathSegments.slice(1).join('/');
+
+    return {
+      link1: `https://${bucketName}.s3.us-west-004.backblazeb2.com/${objectPath}`,
+      link2: `https://s3.us-west-004.backblazeb2.com/${bucketName}/${objectPath}`
+    };
+  };
+
+  const handleCopyMarketplaceLink = async (imgName: string, targetAlbum: string, mp: '1' | '2' | 'ALL') => {
     try {
-      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-      const baseUrl = await getPublicB2Url(imgName, folderPrefix);
-      const urlObj = new URL(baseUrl);
-      const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-      const bucketName = pathSegments[0];
-      const objectPath = pathSegments.slice(1).join('/');
-      
-      const urls = {
-        FR: baseUrl,
-        OX: `https://${bucketName}.${urlObj.host}/${objectPath}`,
-        SOT: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`,
-        MUA: `https://wsrv.nl/?url=${urlObj.host}${urlObj.pathname}`
-      };
-      
+      const { link1, link2 } = await getDualLinks(imgName, targetAlbum);
       let textToCopy = '';
       if (mp === 'ALL') {
-        textToCopy = `FR:  ${urls.FR}\nOX:  ${urls.OX}\nSOT: ${urls.SOT}\nMUA: ${urls.MUA}`;
+        textToCopy = `Link 1:\n${link1}\n\nLink 2:\n${link2}`;
       } else {
-        textToCopy = urls[mp as keyof typeof urls];
+        textToCopy = mp === '1' ? link1 : link2;
       }
-
       await navigator.clipboard.writeText(textToCopy);
       setCopiedKey(`${imgName}_${mp}`);
       setTimeout(() => setCopiedKey(''), 2000);
@@ -522,7 +526,7 @@ function ImageVault() {
     setUploadProgress(0);
     
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
-    const successfulUploads: {name: string, fr: string, ox: string, sot: string, mua: string}[] = [];
+    const successfulUploads: {name: string, link1: string, link2: string}[] = [];
     const totalFiles = pendingFiles.length;
 
     for (let i = 0; i < totalFiles; i++) {
@@ -543,19 +547,8 @@ function ImageVault() {
         const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
         const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         if (res.ok) {
-          const baseUrl = await getPublicB2Url(file.name, folderPrefix);
-          const urlObj = new URL(baseUrl);
-          const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-          const bucketName = pathSegments[0];
-          const objectPath = pathSegments.slice(1).join('/');
-
-          successfulUploads.push({
-            name: file.name,
-            fr: baseUrl,
-            ox: `https://${bucketName}.${urlObj.host}/${objectPath}`,
-            sot: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`,
-            mua: `https://wsrv.nl/?url=${urlObj.host}${urlObj.pathname}`
-          });
+          const { link1, link2 } = await getDualLinks(file.name, activeAlbum);
+          successfulUploads.push({ name: file.name, link1, link2 });
         }
       } catch (err) { 
         console.error("Batch upload error", file.name, err); 
@@ -579,31 +572,17 @@ function ImageVault() {
     }, 600);
   };
 
-  const handleCopyAllLinks = async (targetAlbum: string, mp: 'FR' | 'OX' | 'SOT' | 'MUA' | 'ALL') => {
+  const handleCopyAllLinks = async (targetAlbum: string, type: '1' | '2' | 'ALL') => {
     try {
-      const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
       const imagesToCopy = albumData[targetAlbum] || [];
-      
       const urlsToCopy = await Promise.all(imagesToCopy.map(async (img) => {
-        const baseUrl = await getPublicB2Url(img.name, folderPrefix);
-        const urlObj = new URL(baseUrl);
-        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-        const bucketName = pathSegments[0];
-        const objectPath = pathSegments.slice(1).join('/');
-
-        const urls: Record<string, string> = {
-          FR: baseUrl,
-          OX: `https://${bucketName}.${urlObj.host}/${objectPath}`,
-          SOT: `https://cdn.statically.io/img/${urlObj.host}/${bucketName}/${objectPath}`,
-          MUA: `https://wsrv.nl/?url=${urlObj.host}${urlObj.pathname}`
-        };
-        
-        if (mp === 'ALL') return `${img.name}:\nFR:  ${urls.FR}\nOX:  ${urls.OX}\nSOT: ${urls.SOT}\nMUA: ${urls.MUA}\n`;
-        return urls[mp];
+        const { link1, link2 } = await getDualLinks(img.name, targetAlbum);
+        if (type === 'ALL') return `${img.name}:\nL1: ${link1}\nL2: ${link2}\n`;
+        return type === '1' ? link1 : link2;
       }));
 
       await navigator.clipboard.writeText(urlsToCopy.join('\n'));
-      setCopiedAll(mp);
+      setCopiedAll(type);
       setTimeout(() => setCopiedAll(false), 2000);
     } catch (err) { console.error("Failed to copy all links", err); }
   };
@@ -641,11 +620,13 @@ function ImageVault() {
 
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim()) return;
-    const name = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
-    if (!localAlbums.includes(name) && !albums.includes(name)) {
-      setLocalAlbums([...localAlbums, name]);
+    const cleanName = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
+    const finalName = newAlbumCategory === 'None' ? cleanName : `[${newAlbumCategory}] ${cleanName}`;
+    if (!localAlbums.includes(finalName) && !albums.includes(finalName)) {
+      setLocalAlbums([...localAlbums, finalName]);
     }
     setNewAlbumName('');
+    setNewAlbumCategory('None');
   };
 
   const handleRenameAlbum = async (oldAlbumName: string) => {
@@ -653,7 +634,7 @@ function ImageVault() {
       setEditingAlbum(null);
       return;
     }
-    const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_');
+    const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s\[\]]/g, '_');
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
@@ -805,7 +786,16 @@ function ImageVault() {
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
                 <input type="text" placeholder="Search albums and images globally..." value={albumSearch} onChange={e => { setAlbumSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
               </div>
+              
+              {/* 🔥 ALBUM CREATION W/ CATEGORY DROP DOWN */}
               <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-2 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                  <option value="None">No Category</option>
+                  <option value="FR">FR</option>
+                  <option value="OX">OX</option>
+                  <option value="SOT">SOT</option>
+                  <option value="MUA">MUA</option>
+                </select>
                 <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border p-2 rounded-md text-sm bg-white flex-1 sm:w-48" />
                 <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum}><Plus className="w-4 h-4 mr-1"/> Create</Button>
               </div>
@@ -892,14 +882,12 @@ function ImageVault() {
                           </div>
                         )}
                         <div className="space-y-1 mt-auto">
-                          <div className="grid grid-cols-4 gap-1">
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'FR')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_FR` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>FR</button>
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'OX')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_OX` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>OX</button>
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'SOT')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_SOT` ? 'bg-emerald-500 text-white' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>SOT</button>
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'MUA')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_MUA` ? 'bg-emerald-500 text-white' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}>MUA</button>
+                          <div className="grid grid-cols-2 gap-1">
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
                           </div>
                           <div className="flex space-x-1">
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied All!' : 'Copy All 4'}</button>
+                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
                             <button onClick={() => handleDeleteImage(imgObj.name, imgObj.album)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
                           </div>
                         </div>
@@ -943,42 +931,31 @@ function ImageVault() {
         </div>
       )}
 
+      {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-              <p className="text-xs text-slate-500">Marketplace links generated for Fuel Rider (FR), OxGord (OX), SOT, and MUA:</p>
+              <p className="text-xs text-slate-500">Links successfully generated for your masterlists:</p>
               <div className="space-y-3">
                 {uploadedBatchLinks.map((item, i) => (
                   <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
                     <span className="font-bold text-slate-800 block truncate">{item.name}</span>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <div className="flex items-center justify-between bg-white p-2 rounded border">
-                        <span className="font-semibold text-blue-600">FR:</span>
-                        <button onClick={() => { navigator.clipboard.writeText(item.fr); setCopiedKey(`${item.name}_FR_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-blue-600 font-bold">
-                          {copiedKey === `${item.name}_FR_BATCH` ? 'Copied!' : 'Copy FR'}
+                        <span className="font-semibold text-blue-600 truncate text-[10px] pr-2">{item.link1}</span>
+                        <button onClick={() => { navigator.clipboard.writeText(item.link1); setCopiedKey(`${item.name}_1_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-blue-600 font-bold whitespace-nowrap">
+                          {copiedKey === `${item.name}_1_BATCH` ? 'Copied!' : 'Copy'}
                         </button>
                       </div>
                       <div className="flex items-center justify-between bg-white p-2 rounded border">
-                        <span className="font-semibold text-amber-600">OX:</span>
-                        <button onClick={() => { navigator.clipboard.writeText(item.ox); setCopiedKey(`${item.name}_OX_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-amber-600 font-bold">
-                          {copiedKey === `${item.name}_OX_BATCH` ? 'Copied!' : 'Copy OX'}
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between bg-white p-2 rounded border">
-                        <span className="font-semibold text-purple-600">SOT:</span>
-                        <button onClick={() => { navigator.clipboard.writeText(item.sot); setCopiedKey(`${item.name}_SOT_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-purple-600 font-bold">
-                          {copiedKey === `${item.name}_SOT_BATCH` ? 'Copied!' : 'Copy SOT'}
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between bg-white p-2 rounded border">
-                        <span className="font-semibold text-indigo-600">MUA:</span>
-                        <button onClick={() => { navigator.clipboard.writeText(item.mua); setCopiedKey(`${item.name}_MUA_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-indigo-600 font-bold">
-                          {copiedKey === `${item.name}_MUA_BATCH` ? 'Copied!' : 'Copy MUA'}
+                        <span className="font-semibold text-amber-600 truncate text-[10px] pr-2">{item.link2}</span>
+                        <button onClick={() => { navigator.clipboard.writeText(item.link2); setCopiedKey(`${item.name}_2_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-amber-600 font-bold whitespace-nowrap">
+                          {copiedKey === `${item.name}_2_BATCH` ? 'Copied!' : 'Copy'}
                         </button>
                       </div>
                     </div>
@@ -990,11 +967,9 @@ function ImageVault() {
               <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
               <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Batch:</span>
-                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.fr).join('\n')); setCopiedAll('BATCH_FR'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_FR' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>FR</button>
-                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.ox).join('\n')); setCopiedAll('BATCH_OX'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_OX' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>OX</button>
-                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.sot).join('\n')); setCopiedAll('BATCH_SOT'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_SOT' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>SOT</button>
-                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.mua).join('\n')); setCopiedAll('BATCH_MUA'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_MUA' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>MUA</button>
-                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nFR: ${l.fr}\nOX: ${l.ox}\nSOT: ${l.sot}\nMUA: ${l.mua}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>ALL 4</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.link1).join('\n')); setCopiedAll('BATCH_1'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_1' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 1s</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.link2).join('\n')); setCopiedAll('BATCH_2'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_2' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 2s</button>
+                <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nL1: ${l.link1}\nL2: ${l.link2}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Both Links</button>
               </div>
             </div>
           </div>
@@ -1055,11 +1030,9 @@ function ImageVault() {
             {currentImages.length > 0 && (
               <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Album:</span>
-                <button onClick={() => handleCopyAllLinks(activeAlbum, 'FR')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'FR' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>FR</button>
-                <button onClick={() => handleCopyAllLinks(activeAlbum, 'OX')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'OX' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>OX</button>
-                <button onClick={() => handleCopyAllLinks(activeAlbum, 'SOT')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'SOT' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>SOT</button>
-                <button onClick={() => handleCopyAllLinks(activeAlbum, 'MUA')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'MUA' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>MUA</button>
-                <button onClick={() => handleCopyAllLinks(activeAlbum, 'ALL')} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>ALL 4</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, '1')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === '1' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 1s</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, '2')} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === '2' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 2s</button>
+                <button onClick={() => handleCopyAllLinks(activeAlbum, 'ALL')} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Both Links</button>
               </div>
             )}
           </div>
@@ -1093,14 +1066,12 @@ function ImageVault() {
                       )}
 
                       <div className="space-y-1 mt-auto">
-                        <div className="grid grid-cols-4 gap-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'FR')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_FR` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>FR</button>
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'OX')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_OX` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>OX</button>
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'SOT')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_SOT` ? 'bg-emerald-500 text-white' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>SOT</button>
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'MUA')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_MUA` ? 'bg-emerald-500 text-white' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`}>MUA</button>
+                        <div className="grid grid-cols-2 gap-1">
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
                         </div>
                         <div className="flex space-x-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgName}_ALL` ? 'Copied All!' : 'Copy All 4'}</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgName}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
                           <button onClick={() => handleDeleteImage(imgName, activeAlbum)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
                         </div>
                       </div>
