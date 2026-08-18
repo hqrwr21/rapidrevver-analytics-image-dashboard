@@ -951,7 +951,7 @@ function ImageVault() {
       {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
@@ -1099,7 +1099,7 @@ function ImageVault() {
                 );
               })}
             </div>
-          ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
+          ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
         ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">Album is empty. Queue and upload files above.</div>}
       </Card>
     </div>
@@ -2036,6 +2036,17 @@ const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
   });
 };
 
+const ADS_LEADERBOARD_HEADERS = [
+  "Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", 
+  "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", 
+  "Customer Search Term", "Impressions", "Clicks", "Click-Thru Rate (CTR)", 
+  "Cost Per Click (CPC)", "Spend", "7 Day Total Sales", 
+  "Total Advertising Cost of Sales (ACOS)", "Total Return on Advertising Spend (ROAS)", 
+  "7 Day Total Orders (#)", "7 Day Total Units (#)", "7 Day Conversion Rate", 
+  "7 Day Advertised SKU Units (#)", "7 Day Other SKU Units (#)", 
+  "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
+];
+
 function AdsAnalysis() {
   const [activeTab, setActiveTab] = useState('perf');
   const [refreshTrigger] = useState(0);
@@ -2072,6 +2083,10 @@ function AdsAnalysis() {
     terms: { key: 'Spend', dir: 'desc' },
     raw: { key: '', dir: 'asc' }
   });
+
+  const [visibleAdColumns, setVisibleAdColumns] = useState<Set<string>>(new Set(ADS_LEADERBOARD_HEADERS));
+  const [showAdColumnFilter, setShowAdColumnFilter] = useState(false);
+  const visibleHeaders = ADS_LEADERBOARD_HEADERS.filter(col => visibleAdColumns.has(col));
 
   const handleSort = (table: string, key: string) => {
     setSortConfigs(prev => {
@@ -2177,26 +2192,26 @@ function AdsAnalysis() {
     };
   }, [filteredData]);
 
-  const ADS_HEADERS = [
-    "Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", 
-    "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", 
-    "Customer Search Term", "Impressions", "Clicks", "Click-Thru Rate (CTR)", 
-    "Cost Per Click (CPC)", "Spend", "7 Day Total Sales", 
-    "Total Advertising Cost of Sales (ACOS)", "Total Return on Advertising Spend (ROAS)", 
-    "7 Day Total Orders (#)", "7 Day Total Units (#)", "7 Day Conversion Rate", 
-    "7 Day Advertised SKU Units (#)", "7 Day Other SKU Units (#)", 
-    "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
-  ];
-
   const aggregateGroup = (groupByKey: string, limit: number, sortBySales = true) => {
     const map = new Map<string, any>();
     filteredData.forEach(row => {
-      const keyVal = row[groupByKey] || row[groupByKey.toLowerCase()] || 'Unknown';
+      let keyVal = row[groupByKey];
+      if (!keyVal) {
+        const foundKey = Object.keys(row).find(k => k.toLowerCase() === groupByKey.toLowerCase());
+        keyVal = foundKey ? row[foundKey] : 'Unknown';
+      }
+      if (!keyVal) keyVal = 'Unknown';
+
       if (!map.has(keyVal)) {
         const initObj: any = {};
-        ADS_HEADERS.forEach(h => {
+        ADS_LEADERBOARD_HEADERS.forEach(h => {
           if (["Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", "Customer Search Term"].includes(h)) {
-            initObj[h] = row[h] || row[h.toLowerCase()] || '';
+            let val = row[h];
+            if (val === undefined) {
+              const foundK = Object.keys(row).find(k => k.toLowerCase() === h.toLowerCase());
+              val = foundK ? row[foundK] : '';
+            }
+            initObj[h] = val || '';
           } else {
             initObj[h] = 0; 
           }
@@ -2205,16 +2220,22 @@ function AdsAnalysis() {
       }
       
       const item = map.get(keyVal)!;
-      item['Impressions'] += parseNum(row['Impressions']);
-      item['Clicks'] += parseNum(row['Clicks']);
-      item['Spend'] += parseNum(row['Spend']);
-      item['7 Day Total Sales'] += parseNum(row['7 Day Total Sales'] || row['Sales']);
-      item['7 Day Total Orders (#)'] += parseNum(row['7 Day Total Orders (#)'] || row['Orders']);
-      item['7 Day Total Units (#)'] += parseNum(row['7 Day Total Units (#)']);
-      item['7 Day Advertised SKU Units (#)'] += parseNum(row['7 Day Advertised SKU Units (#)']);
-      item['7 Day Other SKU Units (#)'] += parseNum(row['7 Day Other SKU Units (#)']);
-      item['7 Day Advertised SKU Sales'] += parseNum(row['7 Day Advertised SKU Sales']);
-      item['7 Day Other SKU Sales'] += parseNum(row['7 Day Other SKU Sales']);
+      const getRowVal = (headerName: string) => {
+        if (row[headerName] !== undefined) return parseNum(row[headerName]);
+        const foundK = Object.keys(row).find(k => k.toLowerCase() === headerName.toLowerCase());
+        return foundK ? parseNum(row[foundK]) : 0;
+      };
+
+      item['Impressions'] += getRowVal('Impressions');
+      item['Clicks'] += getRowVal('Clicks');
+      item['Spend'] += getRowVal('Spend');
+      item['7 Day Total Sales'] += getRowVal('7 Day Total Sales');
+      item['7 Day Total Orders (#)'] += getRowVal('7 Day Total Orders (#)');
+      item['7 Day Total Units (#)'] += getRowVal('7 Day Total Units (#)');
+      item['7 Day Advertised SKU Units (#)'] += getRowVal('7 Day Advertised SKU Units (#)');
+      item['7 Day Other SKU Units (#)'] += getRowVal('7 Day Other SKU Units (#)');
+      item['7 Day Advertised SKU Sales'] += getRowVal('7 Day Advertised SKU Sales');
+      item['7 Day Other SKU Sales'] += getRowVal('7 Day Other SKU Sales');
     });
 
     return Array.from(map.entries()).map(([name, data]) => {
@@ -2270,10 +2291,10 @@ function AdsAnalysis() {
     if (typeof val === 'number') {
       if (col.includes('Rate') || col.includes('(CTR)') || col.includes('(ACOS)')) return `${val.toFixed(2)}%`;
       if (col.includes('Spend') || col.includes('Sales') || col.includes('(CPC)')) return `$${val.toFixed(2)}`;
-      if (col.includes('ROAS')) return val.toFixed(2);
+      if (col.includes('(ROAS)')) return val.toFixed(2);
       return val.toLocaleString();
     }
-    return val;
+    return val || '';
   };
 
   return (
@@ -2337,10 +2358,50 @@ function AdsAnalysis() {
         </Card>
 
         <div className="lg:col-span-3 space-y-6">
-          <div className="flex border-b border-slate-200 overflow-x-auto">
-            <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview</button>
-            <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Raw Data Vault</button>
-            <button onClick={() => setActiveTab('export')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Export Hub</button>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-2 mb-4 gap-4">
+            <div className="flex overflow-x-auto w-full sm:w-auto space-x-2">
+              <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview</button>
+              <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Raw Data Vault</button>
+              <button onClick={() => setActiveTab('export')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Export Hub</button>
+            </div>
+            
+            {activeTab === 'perf' && (
+              <div className="relative z-30">
+                <Button variant="secondary" onClick={() => setShowAdColumnFilter(!showAdColumnFilter)} className="bg-white">
+                  <List className="w-4 h-4 mr-2" /> Metrics ({visibleAdColumns.size}/{ADS_LEADERBOARD_HEADERS.length})
+                </Button>
+                {showAdColumnFilter && (
+                  <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-64 max-h-96 flex flex-col animate-in slide-in-from-top-2">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-bold text-slate-800">Show Metrics</h4>
+                      <div className="flex space-x-2">
+                        <button onClick={() => setVisibleAdColumns(new Set(ADS_LEADERBOARD_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
+                        <button onClick={() => setVisibleAdColumns(new Set(["Campaign Name"]))} className="text-xs text-slate-500 hover:underline">Clear</button>
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1 space-y-2 pr-2">
+                      {ADS_LEADERBOARD_HEADERS.map(col => (
+                        <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={visibleAdColumns.has(col)} 
+                            onChange={() => {
+                              const next = new Set(visibleAdColumns);
+                              if (next.has(col)) next.delete(col);
+                              else next.add(col);
+                              setVisibleAdColumns(next);
+                            }}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="truncate">{col}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <Button onClick={() => setShowAdColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply</Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {isDataLoading ? (
@@ -2381,7 +2442,7 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('campaigns', col)}>
                                 <div className="flex items-center">
                                   {col} <SortIcon table="campaigns" colKey={col} />
@@ -2390,7 +2451,7 @@ function AdsAnalysis() {
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={campaignColFilters[col] || ''} onChange={e => setCampaignColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2400,7 +2461,7 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedCampaigns.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              {ADS_HEADERS.map(col => (
+                              {visibleHeaders.map(col => (
                                 <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
                               ))}
                             </tr>
@@ -2420,7 +2481,7 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('adgroups', col)}>
                                 <div className="flex items-center">
                                   {col} <SortIcon table="adgroups" colKey={col} />
@@ -2429,7 +2490,7 @@ function AdsAnalysis() {
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={adGroupColFilters[col] || ''} onChange={e => setAdGroupColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2439,7 +2500,7 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedAdGroups.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              {ADS_HEADERS.map(col => (
+                              {visibleHeaders.map(col => (
                                 <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
                               ))}
                             </tr>
@@ -2459,7 +2520,7 @@ function AdsAnalysis() {
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
                           <tr>
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('terms', col)}>
                                 <div className="flex items-center">
                                   {col} <SortIcon table="terms" colKey={col} />
@@ -2468,7 +2529,7 @@ function AdsAnalysis() {
                             ))}
                           </tr>
                           <tr className="bg-slate-100">
-                            {ADS_HEADERS.map(col => (
+                            {visibleHeaders.map(col => (
                               <th key={`filter-${col}`} className="p-1 border-t border-slate-200">
                                 <input type="text" placeholder="Filter..." className="w-full min-w-[50px] p-1 text-[10px] border border-slate-300 rounded font-normal bg-white" value={termColFilters[col] || ''} onChange={e => setTermColFilters(prev => ({...prev, [col]: e.target.value}))} />
                               </th>
@@ -2478,7 +2539,7 @@ function AdsAnalysis() {
                         <tbody className="divide-y divide-slate-100">
                           {sortedTerms.map((r, i) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              {ADS_HEADERS.map(col => (
+                              {visibleHeaders.map(col => (
                                 <td key={col} className="p-2 truncate max-w-[200px]">{renderAdValue(col, r[col])}</td>
                               ))}
                             </tr>
@@ -2500,7 +2561,7 @@ function AdsAnalysis() {
                     <table className="w-full text-xs text-left whitespace-nowrap">
                       <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
                         <tr>
-                          {ADS_HEADERS.map(k => (
+                          {ADS_LEADERBOARD_HEADERS.map(k => (
                             <th key={k} className="p-2 text-slate-700 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('raw', k)}>
                               <div className="flex items-center">
                                 {k} <SortIcon table="raw" colKey={k} />
@@ -2509,7 +2570,7 @@ function AdsAnalysis() {
                           ))}
                         </tr>
                         <tr className="bg-slate-100">
-                          {ADS_HEADERS.map(k => (
+                          {ADS_LEADERBOARD_HEADERS.map(k => (
                             <th key={`filter-${k}`} className="p-1 border-t border-slate-200">
                               <input 
                                 type="text" 
@@ -2525,8 +2586,8 @@ function AdsAnalysis() {
                       <tbody className="divide-y">
                         {sortedRawData.slice(0, 200).map((row, i) => (
                           <tr key={i} className="hover:bg-slate-50">
-                            {ADS_HEADERS.map(k => (
-                              <td key={k} className="p-2 truncate max-w-[200px]">{row[k] !== undefined ? row[k] : ''}</td>
+                            {ADS_LEADERBOARD_HEADERS.map(k => (
+                              <td key={k} className="p-2 truncate max-w-[200px]">{renderAdValue(k, row[k] !== undefined ? row[k] : (row[k.toLowerCase()] !== undefined ? row[k.toLowerCase()] : ''))}</td>
                             ))}
                           </tr>
                         ))}
@@ -2558,10 +2619,18 @@ function AdsAnalysis() {
                     <Button onClick={() => {
                       let exportDataset: any[] = [];
                       if (optSummary) exportDataset.push({ "Metric": "Total Spend", "Value": aggregate.totalSpend }, { "Metric": "Total Sales", "Value": aggregate.totalSales });
-                      if (optCampaigns) exportDataset = exportDataset.concat(sortedCampaigns);
-                      if (optAdGroups) exportDataset = exportDataset.concat(sortedAdGroups);
-                      if (optTerms) exportDataset = exportDataset.concat(sortedTerms);
+                      
+                      const filterColumnsForExport = (data: any[]) => data.map(row => {
+                        const obj: any = {};
+                        visibleHeaders.forEach(col => { obj[col] = row[col]; });
+                        return obj;
+                      });
+
+                      if (optCampaigns) exportDataset = exportDataset.concat(filterColumnsForExport(sortedCampaigns));
+                      if (optAdGroups) exportDataset = exportDataset.concat(filterColumnsForExport(sortedAdGroups));
+                      if (optTerms) exportDataset = exportDataset.concat(filterColumnsForExport(sortedTerms));
                       if (optRaw) exportDataset = exportDataset.concat(sortedRawData);
+                      
                       downloadCSV(exportDataset, 'Amazon_Advertising_Export.csv');
                     }}>Download Selected Views (CSV)</Button>
                   </Card>
