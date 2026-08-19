@@ -236,6 +236,48 @@ CATEGORY_SCHEMAS['global'] = [
   { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
 ];
 
+// ==========================================
+// SEO MATCHING ENGINE
+// ==========================================
+interface MatchResult {
+  keyword: string; status: string; exact_locations: string[]; exact_loc_str: string;
+  token_coverage_pct: number; missing_tokens: string[]; missing_tokens_str: string;
+}
+
+const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, string>): MatchResult => {
+  const cleanKw = String(kwPhrase).toLowerCase().trim();
+  const kwTokens = cleanKw.match(/\b\w+\b/g)?.filter(t => t.length > 1) || [];
+
+  if (kwTokens.length === 0) {
+    return { keyword: kwPhrase, status: "Invalid Keyword", exact_locations: [], exact_loc_str: "None", token_coverage_pct: 0, missing_tokens: [], missing_tokens_str: "None" };
+  }
+
+  const exactLocations: string[] = [];
+  let fieldTextCombined = "";
+  Object.entries(fieldsDict).forEach(([label, text]) => {
+    if (text && typeof text === 'string') {
+      const cleanText = text.toLowerCase();
+      fieldTextCombined += " " + cleanText;
+      if (cleanText.includes(cleanKw)) exactLocations.push(label);
+    }
+  });
+
+  const foundTokens = new Set<string>();
+  const missingTokens: string[] = [];
+  kwTokens.forEach(token => {
+    const regex = new RegExp(`\\b${token}\\b`);
+    if (regex.test(fieldTextCombined)) foundTokens.add(token); else missingTokens.push(token);
+  });
+
+  const coveragePct = Math.round((foundTokens.size / kwTokens.length) * 100 * 10) / 10;
+  let status = exactLocations.length > 0 ? "🟢 Exact Match" : coveragePct === 100 ? "🟡 Broad Match (All Words Present)" : coveragePct > 0 ? `🟠 Partial Match (${foundTokens.size}/${kwTokens.length} Words)` : "🔴 Missing (0% Coverage)";
+
+  return {
+    keyword: kwPhrase, status, exact_locations: exactLocations, exact_loc_str: exactLocations.length > 0 ? exactLocations.join(", ") : "None",
+    token_coverage_pct: coveragePct, missing_tokens: missingTokens,
+    missing_tokens_str: missingTokens.length > 0 ? missingTokens.join(", ") : "None"
+  };
+};
 
 // ==========================================
 // 3. BASE UI COMPONENTS & CUSTOM HOOKS
