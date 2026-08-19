@@ -157,22 +157,34 @@ const unpackRecord = (row: Record<string, string>): Record<string, string> => {
 // ==========================================
 const CATALOG_HEADERS = [
   "Run", "ASIN", "Brand", "Al's Listing SKU", "RR Listing SKU", "Keystone PN", 
-  "Category", "Avg/mo (top 3)", "URL", "bought_in_past_month", "best_seller_main_category", 
-  "best_seller_main_rank", "best_seller_category_1", "best_seller_rank_1", 
-  "best_seller_category_2", "best_seller_rank_2", "rating", "reviews_count", 
-  "badge", "title", "brand_name", "bullet_point_1", "bullet_point_2", 
-  "bullet_point_3", "bullet_point_4", "bullet_point_5", "brand_story", 
-  "a_plus_content", "a_plus_content_code", "a_plus_content_type", "description", 
-  "release_date", "country_of_origin", "part_number", "model", "box_content", 
-  "color_name", "material_type", "availability", "list_price", "shipping_cost", 
-  "fastest_delivery", "categories", "categories_links", "image_1_source", 
+  "Category", "Avg/mo (top 3)", "URL", "title", "brand_name", "manufacturer", 
+  "brand_store_link", "model", "release_date", "country_of_origin", "categories", 
+  "categories_links", "product_gl", "bought_in_past_month", "best_seller_rank_1", 
+  "best_seller_category_1", "best_seller_link_1", "best_seller_rank_2", 
+  "best_seller_category_2", "best_seller_link_2", "rating", "rating_percentage_x_stars", 
+  "reviews_count", "part_number", "box_content", "Data selector", "a_plus_content_type", 
+  "a_plus_content_images", "a_plus_content", "is_brand_story", "brand_story_images", 
+  "bullet_point_1", "bullet_point_2", "bullet_point_3", "bullet_point_4", "bullet_point_5", 
+  "bullet_points", "description", "featured_image_source", "image_1_source", 
   "image_2_source", "image_3_source", "image_4_source", "image_5_source", 
   "image_6_source", "image_7_source", "image_8_source", "image_9_source", 
-  "image_10_source", "item_dimensions_unit_of_measure", "item_height", 
-  "item_height_unit_of_measure", "item_length", "item_length_unit_of_measure", 
-  "item_width", "item_width_unit_of_measure", "item_weight", "item_weight_unit_of_measure", 
-  "package_height", "package_length", "package_width", "package_dimensions_unit_of_measure", 
-  "package_weight", "package_weight_unit_of_measure", "item_name", "metaKeywords"
+  "image_10_source", "has_video", "video_url", "availability", "list_price", 
+  "list_price_label", "historical_low_price", "historical_low_price_label", 
+  "sale_price", "sale_price_per_unit", "has_prime_badge", "prime_price", "badge", 
+  "delight_pricing_badge", "has_deal", "deal_label", "has_coupon", "coupon_percentage", 
+  "coupon_value", "buybox_quantity_max", "buybox_quantity_min", "buybox_winner", 
+  "buybox_winner_link", "sns_sale_price", "sns_buybox_winner", "ships_from", 
+  "shipping_cost", "offers_count", "normal_delivery", "fastest_delivery", "countdown", 
+  "customer_retention_label", "reviews_rating", "reviews_title", "reviews_body", 
+  "reviews_link", "reviews_profile_name", "reviews_date", "current_variation_headers", 
+  "current_variation_values", "variations_asins", "variation_1_header", "variation_1_value", 
+  "feature_headers", "feature_values", "details_headers", "details_values", "capacity", 
+  "color_name", "size_name", "style_name", "has_climate_pledge_friendly_badge", 
+  "item_dimensions_unit_of_measure", "item_height", "item_height_unit_of_measure", 
+  "item_length", "item_length_unit_of_measure", "item_weight", "item_weight_unit_of_measure", 
+  "item_width", "item_width_unit_of_measure", "package_dimensions_unit_of_measure", 
+  "package_height", "package_length", "package_weight", "package_weight_unit_of_measure", 
+  "package_width"
 ];
 
 const ADS_LEADERBOARD_HEADERS = [
@@ -236,8 +248,9 @@ CATEGORY_SCHEMAS['global'] = [
   { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
 ];
 
+
 // ==========================================
-// SEO MATCHING ENGINE
+// 3. SEO MATCHING ENGINE
 // ==========================================
 interface MatchResult {
   keyword: string; status: string; exact_locations: string[]; exact_loc_str: string;
@@ -280,7 +293,7 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 };
 
 // ==========================================
-// 3. BASE UI COMPONENTS & CUSTOM HOOKS
+// 4. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
 function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
@@ -317,7 +330,7 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
 
 
 // ==========================================
-// 4. MODULE: DATA INGESTION
+// 5. MODULE: DATA INGESTION
 // ==========================================
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
@@ -496,7 +509,7 @@ function DataIngestion() {
 }
 
 // ==========================================
-// 5. MODULE: IMAGE VAULT 
+// 6. MODULE: IMAGE VAULT 
 // ==========================================
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
@@ -862,7 +875,7 @@ function ImageVault() {
           </div>
         )}
 
-        {/* BATCH UPLOAD COMPLETE MODAL */}
+        {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
         {uploadedBatchLinks && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -910,7 +923,7 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Image Vault</h2>
+          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
@@ -1032,7 +1045,7 @@ function ImageVault() {
                   );
                 })}
               </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images contain "{albumSearch}".</div>}
+            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>}
           </Card>
         )}
       </div>
@@ -1067,7 +1080,7 @@ function ImageVault() {
         </div>
       )}
 
-      {/* BATCH UPLOAD COMPLETE MODAL */}
+      {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -1243,8 +1256,9 @@ function MasterlistWorkspace() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set());
   const [showColumnFilter, setShowColumnFilter] = useState(false);
+  const [colSearch, setColSearch] = useState('');
 
-  const activeCatObj = PRODUCT_CATEGORIES.find(c => c.id === activeCategory)!;
+  const activeCatObj = PRODUCT_CATEGORIES.find((c: any) => c.id === activeCategory)!;
 
   const { schemaWithKeys, flattenedSchemaCols } = useMemo(() => {
     const rawSchema = CATEGORY_SCHEMAS[activeCategory]?.length > 0 
@@ -1252,7 +1266,7 @@ function MasterlistWorkspace() {
       : CATEGORY_SCHEMAS['wheel_skins'];
 
     const headerCounts: Record<string, number> = {};
-    const keysSchema = rawSchema.map(g => ({
+    const keysSchema = rawSchema.map((g: any) => ({
       ...g,
       subgroups: g.subgroups.map((sg: any) => ({
         ...sg,
@@ -1266,7 +1280,7 @@ function MasterlistWorkspace() {
       }))
     }));
 
-    const flatCols = keysSchema.flatMap(g => g.subgroups.flatMap((sg: any) => sg.colsWithKey));
+    const flatCols = keysSchema.flatMap((g: any) => g.subgroups.flatMap((sg: any) => sg.colsWithKey));
     return { schemaWithKeys: keysSchema, flattenedSchemaCols: flatCols };
   }, [activeCategory]);
 
@@ -1274,6 +1288,7 @@ function MasterlistWorkspace() {
     setSelectedRows(new Set());
     setVisibleColumns(new Set(flattenedSchemaCols.map((c: any) => c.dataKey)));
     setShowColumnFilter(false);
+    setColSearch('');
   }, [activeCategory, flattenedSchemaCols]);
 
   useEffect(() => {
@@ -1284,7 +1299,7 @@ function MasterlistWorkspace() {
       if (activeCategory === 'global') {
         setLoadingText('Stitching Global Database...');
         const allData: any[] = [];
-        for (const cat of PRODUCT_CATEGORIES.filter(c => c.id !== 'global')) {
+        for (const cat of PRODUCT_CATEGORIES.filter((c: any) => c.id !== 'global')) {
           const text = await safeGetFileContent(cat.file, 'masterlists/');
           if (text) allData.push(...parseCSVTable(text));
         }
@@ -1378,7 +1393,7 @@ function MasterlistWorkspace() {
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6">
-              {schemaWithKeys.map(group => {
+              {schemaWithKeys.map((group: any) => {
                 const colsToRender = group.subgroups.flatMap((sg: any) => sg.colsWithKey).filter((c:any) => visibleColumns.has(c.dataKey));
                 if (colsToRender.length === 0) return null; 
 
@@ -1430,7 +1445,7 @@ function MasterlistWorkspace() {
       </div>
 
       <div className="flex border-b border-slate-200 overflow-x-auto mt-2">
-        {PRODUCT_CATEGORIES.map(cat => (
+        {PRODUCT_CATEGORIES.map((cat: any) => (
           <button
             key={cat.id}
             onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
@@ -1482,23 +1497,37 @@ function MasterlistWorkspace() {
                 <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
               </div>
             </div>
+            
+            <input 
+              type="text" 
+              placeholder="Search columns..." 
+              value={colSearch} 
+              onChange={e => setColSearch(e.target.value)} 
+              className="w-full text-xs p-1.5 mb-3 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50"
+            />
+            
             <div className="overflow-y-auto flex-1 space-y-2 pr-2">
-              {schemaWithKeys.map(g => (
-                <div key={g.group} className="mb-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{g.group}</p>
-                  {g.subgroups.flatMap((sg:any) => sg.colsWithKey).map((colObj: any) => (
-                    <label key={colObj.dataKey} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={visibleColumns.has(colObj.dataKey)} 
-                        onChange={() => toggleColumn(colObj.dataKey)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="truncate" title={colObj.name}>{colObj.name}</span>
-                    </label>
-                  ))}
-                </div>
-              ))}
+              {schemaWithKeys.map((g: any) => {
+                const matchingCols = g.subgroups.flatMap((sg:any) => sg.colsWithKey).filter((c:any) => c.name.toLowerCase().includes(colSearch.toLowerCase()));
+                if(matchingCols.length === 0) return null;
+                
+                return (
+                  <div key={g.group} className="mb-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{g.group}</p>
+                    {matchingCols.map((colObj: any) => (
+                      <label key={colObj.dataKey} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={visibleColumns.has(colObj.dataKey)} 
+                          onChange={() => toggleColumn(colObj.dataKey)}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="truncate" title={colObj.name}>{colObj.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
             <Button onClick={() => setShowColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply Filters</Button>
           </div>
@@ -1532,7 +1561,7 @@ function MasterlistWorkspace() {
                     }} checked={selectedRows.size === filteredData.length && filteredData.length > 0} className="rounded border-slate-300" />
                   </th>
                   <th className="p-2 border-r border-b border-slate-300 bg-slate-100 sticky left-[36px] z-30 shadow-[1px_0_0_0_#cbd5e1]" rowSpan={3}>Action</th>
-                  {schemaWithKeys.map(g => {
+                  {schemaWithKeys.map((g: any) => {
                     const visibleGroupCols = g.subgroups.flatMap((sg:any) => sg.colsWithKey).filter((c:any) => visibleColumns.has(c.dataKey));
                     if (visibleGroupCols.length === 0) return null;
                     return <th key={g.group} colSpan={visibleGroupCols.length} className={`p-2 text-center text-xs border-r border-slate-300 font-bold ${g.color} ${g.text}`}>{g.group}</th>
@@ -1540,7 +1569,7 @@ function MasterlistWorkspace() {
                 </tr>
                 
                 <tr>
-                  {schemaWithKeys.flatMap((g, gIndex) => g.subgroups.map((sg: any, sgIndex: number) => {
+                  {schemaWithKeys.flatMap((g: any, gIndex: number) => g.subgroups.map((sg: any, sgIndex: number) => {
                     const visibleSgCols = sg.colsWithKey.filter((c:any) => visibleColumns.has(c.dataKey));
                     if (visibleSgCols.length === 0) return null;
                     return <th key={`${g.group}-${sg.name}-${gIndex}-${sgIndex}`} colSpan={visibleSgCols.length} className={`p-1 text-center text-[10px] border-r border-b border-slate-300 font-semibold ${sg.color} ${sg.text}`}>{sg.name || 'Data'}</th>
@@ -2120,6 +2149,8 @@ function AdsAnalysis() {
     'Total Return on Advertising Spend (ROAS)', '7 Day Total Orders (#)', '7 Day Total Units (#)', '7 Day Conversion Rate'
   ]));
   const [showAdColumnFilter, setShowAdColumnFilter] = useState(false);
+  const [adColSearch, setAdColSearch] = useState('');
+  
   const visibleHeaders = ADS_LEADERBOARD_HEADERS.filter(col => visibleAdColumns.has(col));
 
   const handleSort = (table: string, key: string) => {
@@ -2418,8 +2449,17 @@ function AdsAnalysis() {
                         <button onClick={() => setVisibleAdColumns(new Set(['Campaign Name', 'Ad Group Name', 'Customer Search Term']))} className="text-xs text-slate-500 hover:underline">Clear</button>
                       </div>
                     </div>
+                    
+                    <input 
+                      type="text" 
+                      placeholder="Search metrics..." 
+                      value={adColSearch} 
+                      onChange={e => setAdColSearch(e.target.value)} 
+                      className="w-full text-xs p-1.5 mb-3 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                    />
+
                     <div className="overflow-y-auto flex-1 space-y-2 pr-2">
-                      {ADS_LEADERBOARD_HEADERS.map(col => (
+                      {ADS_LEADERBOARD_HEADERS.filter(col => col.toLowerCase().includes(adColSearch.toLowerCase())).map(col => (
                         <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
                           <input 
                             type="checkbox" 
@@ -2484,7 +2524,7 @@ function AdsAnalysis() {
                             {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('campaigns', col)}>
                                 <div className="flex items-center">
-                                  {col} <SortIcon table="campaigns" colKey={col} />
+                                  {col === 'Name' ? 'Campaign Name' : col} <SortIcon table="campaigns" colKey={col} />
                                 </div>
                               </th>
                             ))}
@@ -2523,7 +2563,7 @@ function AdsAnalysis() {
                             {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('adgroups', col)}>
                                 <div className="flex items-center">
-                                  {col} <SortIcon table="adgroups" colKey={col} />
+                                  {col === 'Name' ? 'Ad Group Name' : col} <SortIcon table="adgroups" colKey={col} />
                                 </div>
                               </th>
                             ))}
@@ -2562,7 +2602,7 @@ function AdsAnalysis() {
                             {visibleHeaders.map(col => (
                               <th key={col} className="p-2 cursor-pointer hover:bg-slate-200 select-none transition-colors" onClick={() => handleSort('terms', col)}>
                                 <div className="flex items-center">
-                                  {col} <SortIcon table="terms" colKey={col} />
+                                  {col === 'Name' ? 'Customer Search Term' : col} <SortIcon table="terms" colKey={col} />
                                 </div>
                               </th>
                             ))}
@@ -3023,6 +3063,7 @@ function CatalogMonitor() {
   // New interactive column filter states
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(CATALOG_HEADERS));
   const [showColumnFilter, setShowColumnFilter] = useState(false);
+  const [flagFilterSearch, setFlagFilterSearch] = useState('');
 
   useEffect(() => {
     if (snapshots.length >= 2) {
@@ -3091,7 +3132,7 @@ function CatalogMonitor() {
     setIsAnalyzing(false);
   };
 
-  // Apply the interactive filter to the change log instantly (saves processing power)
+  // Apply the interactive filter to the change log instantly
   const filteredChangeLog = useMemo(() => {
     if (!results) return [];
     return results.changeLog.filter((row: any) => visibleColumns.has(row["Flag Type"]));
@@ -3115,30 +3156,79 @@ function CatalogMonitor() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
-        <p className="text-slate-500 mt-1">Detect unauthorized changes across all 71 attributes.</p>
+        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 71 catalog data points.</p>
       </div>
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Old</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Past Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmOld} onChange={e => setCmOld(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">New</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Recent Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmNew} onChange={e => setCmNew(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
         </div>
-        <div className="flex justify-start border-t pt-4 mt-2">
+        
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-t border-slate-100 pt-4 mt-2">
           <Button onClick={runAnalysis} disabled={isAnalyzing} className="w-full sm:w-auto">
             {isAnalyzing ? 'Scanning Catalog...' : 'Run Full Catalog Scan'}
           </Button>
+
+          {results && (
+            <div className="relative w-full sm:w-auto">
+              <Button variant="secondary" onClick={() => setShowColumnFilter(!showColumnFilter)} className="bg-white border w-full sm:w-auto">
+                <List className="w-4 h-4 mr-2" /> Filter Flags ({visibleColumns.size}/{CATALOG_HEADERS.length})
+              </Button>
+              
+              {showColumnFilter && (
+                <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-72 max-h-[400px] flex flex-col animate-in slide-in-from-top-2 z-50">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-bold text-slate-800">Attributes to Monitor</h4>
+                    <div className="flex space-x-2">
+                      <button onClick={() => setVisibleColumns(new Set(CATALOG_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
+                      <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
+                    </div>
+                  </div>
+                  
+                  <input 
+                    type="text" 
+                    placeholder="Search attributes..." 
+                    value={flagFilterSearch} 
+                    onChange={e => setFlagFilterSearch(e.target.value)} 
+                    className="w-full text-xs p-1.5 mb-3 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50"
+                  />
+
+                  <div className="overflow-y-auto flex-1 space-y-2 pr-2 text-left">
+                    {CATALOG_HEADERS.filter(col => col.toLowerCase().includes(flagFilterSearch.toLowerCase())).map(col => (
+                      <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={visibleColumns.has(col)} 
+                          onChange={() => {
+                            const next = new Set(visibleColumns);
+                            if (next.has(col)) next.delete(col);
+                            else next.add(col);
+                            setVisibleColumns(next);
+                          }}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="truncate" title={col}>{col}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <Button onClick={() => setShowColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply Filters</Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -3150,7 +3240,7 @@ function CatalogMonitor() {
               <p className="text-5xl font-black text-blue-600 mt-2">{results.totalAnalyzed}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-red-50/50 border-red-200">
-              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Visible Flags</p>
+              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Flagged</p>
               <p className="text-5xl font-black text-red-600 mt-2">{filteredChangeLog.length}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-amber-50/50 border-amber-200">
@@ -3159,97 +3249,71 @@ function CatalogMonitor() {
             </Card>
           </div>
 
-          {filteredChangeLog.length > 0 ? (
+          {results.totalFlags === 0 ? (
+            <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
+              <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
+              <p className="text-emerald-700">No unauthorized changes were detected between the Past and Recent data.</p>
+            </Card>
+          ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="p-6 lg:col-span-1 flex flex-col items-center">
                 <h3 className="font-bold text-slate-800 mb-4 w-full border-b pb-2">Flag Distribution</h3>
-                <div className="w-full h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={filteredPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
-                        {filteredPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip />
-                      <Legend verticalAlign="bottom" height={72} wrapperStyle={{ fontSize: '12px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="w-full h-80 flex items-center justify-center">
+                  {filteredPieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={filteredPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                          {filteredPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={72} wrapperStyle={{ fontSize: '12px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic text-center px-4">No data matches your active filters.</p>
+                  )}
                 </div>
               </Card>
 
               <Card className="p-6 lg:col-span-2 flex flex-col">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-2 gap-4">
                   <h3 className="font-bold text-slate-800">Catalog Change Ledger</h3>
-                  
-                  <div className="flex items-center space-x-2 relative">
-                    <Button variant="secondary" onClick={() => setShowColumnFilter(!showColumnFilter)} className="bg-white border text-xs py-1.5 px-3">
-                      <List className="w-3 h-3 mr-2" /> Filter Flags ({visibleColumns.size}/{CATALOG_HEADERS.length})
-                    </Button>
-                    
-                    {showColumnFilter && (
-                      <div className="absolute right-[110px] top-10 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-72 max-h-96 flex flex-col animate-in slide-in-from-top-2 z-50">
-                        <div className="flex justify-between items-center mb-3">
-                          <h4 className="font-bold text-slate-800">Attributes to Monitor</h4>
-                          <div className="flex space-x-2">
-                            <button onClick={() => setVisibleColumns(new Set(CATALOG_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
-                            <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
-                          </div>
-                        </div>
-                        <div className="overflow-y-auto flex-1 space-y-2 pr-2 text-left">
-                          {CATALOG_HEADERS.map(col => (
-                            <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={visibleColumns.has(col)} 
-                                onChange={() => {
-                                  const next = new Set(visibleColumns);
-                                  if (next.has(col)) next.delete(col);
-                                  else next.add(col);
-                                  setVisibleColumns(next);
-                                }}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="truncate" title={col}>{col}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <Button onClick={() => setShowColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply Filters</Button>
-                      </div>
-                    )}
+                  <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} disabled={filteredChangeLog.length === 0} className="py-1 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                </div>
 
-                    <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} className="py-1.5 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                {filteredChangeLog.length > 0 ? (
+                  <div className="overflow-x-auto flex-1 max-h-[350px]">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
+                        <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Past</th><th className="p-2">Recent</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100"> 
+                        {filteredChangeLog.map((r: any, i: number) => {
+                          let rowColor = 'hover:bg-slate-50';
+                          if (r["Flag Type"].toLowerCase().includes('price') || r["Flag Type"].toLowerCase().includes('cost')) rowColor = 'bg-amber-50 hover:bg-amber-100 text-amber-900';
+                          if (r["Flag Type"].toLowerCase().includes('buy box') || r["Flag Type"].toLowerCase().includes('badge')) rowColor = 'bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium';
+                          return (
+                            <tr key={i} className={rowColor}>
+                              <td className="p-2 font-mono font-bold text-slate-800">{r.ASIN}</td>
+                              <td className="p-2 font-semibold">{r["Flag Type"]}</td>
+                              <td className="p-2 truncate max-w-[200px] text-emerald-700">{r["Baseline (Old)"]}</td>
+                              <td className="p-2 truncate max-w-[200px] text-red-700">{r["Target (New)"]}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                </div>
-
-                <div className="overflow-x-auto flex-1 max-h-[350px]">
-                  <table className="w-full text-xs text-left whitespace-nowrap">
-                    <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
-                      <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Baseline (Safe)</th><th className="p-2">Target (Current)</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredChangeLog.map((r: any, i: number) => {
-                        let rowColor = 'hover:bg-slate-50';
-                        if (r["Flag Type"].toLowerCase().includes('price') || r["Flag Type"].toLowerCase().includes('cost')) rowColor = 'bg-amber-50 hover:bg-amber-100 text-amber-900';
-                        if (r["Flag Type"].toLowerCase().includes('buy box') || r["Flag Type"].toLowerCase().includes('badge')) rowColor = 'bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium';
-                        return (
-                          <tr key={i} className={rowColor}>
-                            <td className="p-2 font-mono font-bold text-slate-800">{r.ASIN}</td>
-                            <td className="p-2 font-semibold">{r["Flag Type"]}</td>
-                            <td className="p-2 truncate max-w-[200px] text-emerald-700">{r["Baseline (Old)"]}</td>
-                            <td className="p-2 truncate max-w-[200px] text-red-700">{r["Target (New)"]}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+                    <CheckCircle2 className="w-8 h-8 text-slate-300 mb-2" />
+                    <p className="text-sm text-slate-500 font-medium">All clear here!</p>
+                    <p className="text-xs text-slate-400 mt-1">There are no flagged changes for the specific attributes you selected in the filter.</p>
+                  </div>
+                )}
               </Card>
             </div>
-          ) : (
-            <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
-              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
-              <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
-              <p className="text-emerald-700">No unauthorized changes were detected for your selected attributes between the snapshots.</p>
-            </Card>
           )}
         </>
       )}
