@@ -159,7 +159,41 @@ const unpackRecord = (row: Record<string, string>): Record<string, string> => {
 };
 
 // ==========================================
-// 2. SEO MATCHING ENGINE
+// 2. GLOBAL SCHEMAS (CATALOG & ADS)
+// ==========================================
+const CATALOG_HEADERS = [
+  "Run", "ASIN", "Brand", "Al's Listing SKU", "RR Listing SKU", "Keystone PN", 
+  "Category", "Avg/mo (top 3)", "URL", "bought_in_past_month", "best_seller_main_category", 
+  "best_seller_main_rank", "best_seller_category_1", "best_seller_rank_1", 
+  "best_seller_category_2", "best_seller_rank_2", "rating", "reviews_count", 
+  "badge", "title", "brand_name", "bullet_point_1", "bullet_point_2", 
+  "bullet_point_3", "bullet_point_4", "bullet_point_5", "brand_story", 
+  "a_plus_content", "a_plus_content_code", "a_plus_content_type", "description", 
+  "release_date", "country_of_origin", "part_number", "model", "box_content", 
+  "color_name", "material_type", "availability", "list_price", "shipping_cost", 
+  "fastest_delivery", "categories", "categories_links", "image_1_source", 
+  "image_2_source", "image_3_source", "image_4_source", "image_5_source", 
+  "image_6_source", "image_7_source", "image_8_source", "image_9_source", 
+  "image_10_source", "item_dimensions_unit_of_measure", "item_height", 
+  "item_height_unit_of_measure", "item_length", "item_length_unit_of_measure", 
+  "item_width", "item_width_unit_of_measure", "item_weight", "item_weight_unit_of_measure", 
+  "package_height", "package_length", "package_width", "package_dimensions_unit_of_measure", 
+  "package_weight", "package_weight_unit_of_measure", "item_name", "metaKeywords"
+];
+
+const ADS_LEADERBOARD_HEADERS = [
+  "Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", 
+  "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", 
+  "Customer Search Term", "Impressions", "Clicks", "Click-Thru Rate (CTR)", 
+  "Cost Per Click (CPC)", "Spend", "7 Day Total Sales", 
+  "Total Advertising Cost of Sales (ACOS)", "Total Return on Advertising Spend (ROAS)", 
+  "7 Day Total Orders (#)", "7 Day Total Units (#)", "7 Day Conversion Rate", 
+  "7 Day Advertised SKU Units (#)", "7 Day Other SKU Units (#)", 
+  "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
+];
+
+// ==========================================
+// 3. SEO MATCHING ENGINE
 // ==========================================
 interface MatchResult {
   keyword: string; status: string; exact_locations: string[]; exact_loc_str: string;
@@ -202,7 +236,7 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 };
 
 // ==========================================
-// 3. BASE UI COMPONENTS & CUSTOM HOOKS
+// 4. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
 function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
@@ -238,14 +272,13 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
 }
 
 // ==========================================
-// 4. MODULE: DATA INGESTION
+// 5. MODULE: DATA INGESTION
 // ==========================================
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
   const [catParsedData, setCatParsedData] = useState<any[] | null>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
-  const TOP_LEVEL_COLS = ['ASIN', 'Brand', 'title', 'list_price', 'bullet_point_1'];
 
   const [adFiles, setAdFiles] = useState<File[]>([]);
   const [isAdUploading, setIsAdUploading] = useState(false);
@@ -264,7 +297,10 @@ function DataIngestion() {
     const parsedDataFull = parseCSVTable(text);
     const preview = parsedDataFull.slice(0, 5).map(row => {
       const obj: Record<string, string> = {};
-      Object.keys(row).forEach(h => { if (TOP_LEVEL_COLS.includes(h) || h.toLowerCase() === 'asin') obj[h] = row[h]; });
+      CATALOG_HEADERS.slice(0, 10).forEach(h => { 
+        const found = Object.keys(row).find(k => k.toLowerCase() === h.toLowerCase());
+        obj[h] = found ? row[found] : '';
+      });
       return obj;
     });
     setCatParsedData(preview);
@@ -277,13 +313,12 @@ function DataIngestion() {
       const text = await file.text();
       const rawRows = parseCSVTable(text);
       const records = rawRows.map(row => {
-        const rawData: Record<string, string> = {};
-        Object.keys(row).forEach(k => { if (!TOP_LEVEL_COLS.includes(k) && k.toLowerCase() !== 'asin') rawData[k] = row[k]; });
-        return {
-          batch_name: file.name, asin: String(row.ASIN || row.asin || ''), brand: String(row.Brand || row.brand || ''),
-          title: String(row.title || row.Title || ''), list_price: String(row.list_price || ''), bullet_point_1: String(row.bullet_point_1 || ''),
-          raw_sheet_data: JSON.stringify(rawData)
-        };
+        const obj: any = { batch_name: file.name };
+        CATALOG_HEADERS.forEach(h => {
+          const found = Object.keys(row).find(k => k.toLowerCase() === h.toLowerCase());
+          obj[h] = found ? String(row[found] || '') : '';
+        });
+        return obj;
       });
       const success = await safeUploadTextToB2(toCSV(records), file.name, 'snapshots/');
       if (!success) {
@@ -415,7 +450,7 @@ function DataIngestion() {
 }
 
 // ==========================================
-// TAB 6: IMAGE VAULT (WITH CORE LINKS + CATEGORY)
+// 6. MODULE: IMAGE VAULT 
 // ==========================================
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
@@ -889,7 +924,7 @@ function ImageVault() {
                         <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                         <img src={imgUrl} alt={imgObj.name} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                       </div>
-                      <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                      <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                         {editingImage === uniqueImgKey ? (
                           <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgObj.name, imgObj.album); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgObj.name, imgObj.album)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                         ) : (
@@ -898,16 +933,7 @@ function ImageVault() {
                             <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
                           </div>
                         )}
-                        <div className="space-y-1 mt-auto">
-                          <div className="grid grid-cols-2 gap-1">
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgObj.name}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
-                          </div>
-                          <div className="flex space-x-1">
-                            <button onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
-                            <button onClick={() => handleDeleteImage(imgObj.name, imgObj.album)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
-                          </div>
-                        </div>
+                        <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
                       </div>
                     </div>
                   );
@@ -951,7 +977,7 @@ function ImageVault() {
       {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
@@ -1090,7 +1116,7 @@ function ImageVault() {
                           <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
                         </div>
                         <div className="flex space-x-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgName}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
                           <button onClick={() => handleDeleteImage(imgName, activeAlbum)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
                         </div>
                       </div>
@@ -1099,7 +1125,7 @@ function ImageVault() {
                 );
               })}
             </div>
-          ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
+          ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
         ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">Album is empty. Queue and upload files above.</div>}
       </Card>
     </div>
@@ -1107,95 +1133,8 @@ function ImageVault() {
 }
 
 // ==========================================
-// MODULE: MASTERLIST SCHEMAS
+// 7. MODULE: MASTERLIST WORKSPACE
 // ==========================================
-const CATEGORY_SCHEMAS: Record<string, any[]> = {
-  wheel_skins: [
-    {
-      group: "Shared Data", color: "bg-slate-800", text: "text-white",
-      subgroups: [
-        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part TYpe Jobber", "Status", "Fitment Info", "FTP QTY", "Jobber Price"] },
-        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Cost Price", "Cost Price = 8%", "Product Type", "item Type Keyword", "Hollander/Part Code", "Material", "Number of Items", "Color/ Finish", "Size for Bullet", "Installation Type", "Pattern"] },
-        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "Material", "Number of Items", "Exterior Finish", "Color", "Size for Attribute", "Size Digit", "Model Brand Part Fits", "OEM Equivalent Part Number", "Retention Attrbute", "Pattern", "Included Components"] },
-        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Generic Keywords", "Item Length", "Item Package Length", "Package Length Unit", "Item Package Width", "Package Width Unit", "Item Package Height", "Package Height Unit", "Package Weight"] },
-        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Package Weight Unit", "Fitment Type"] }
-      ]
-    },
-    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
-    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
-    { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
-  ],
-  hubcaps: [
-    {
-      group: "Shared Data", color: "bg-slate-800", text: "text-white",
-      subgroups: [
-        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
-        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] },
-        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["material", "number of items", "exterior finish", "color", "size for attribute", "size digit", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] },
-        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] },
-        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }
-      ]
-    },
-    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
-    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
-    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
-  ],
-  center_caps: [
-    {
-      group: "Shared Data", color: "bg-slate-800", text: "text-white",
-      subgroups: [
-        { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
-        { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["cost price", "Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] },
-        { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["compatible with", "material", "number of items", "exterior finish", "color", "size for attribute", "finish code", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] },
-        { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] },
-        { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type"] }
-      ]
-    },
-    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
-    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
-    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
-    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
-  ]
-};
-
-// 🚀 GLOBAL SUPERSET SCHEMA
-CATEGORY_SCHEMAS['global'] = [
-  {
-    group: "Shared Data", color: "bg-slate-800", text: "text-white",
-    subgroups: [
-      { name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part no", "Part TYpe Jobber", "part type jobber", "Status", "status", "Fitment Info", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] },
-      { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product Type", "Product type", "item Type Keyword", "item type keyword", "Hollander/Part Code", "Material", "material", "Number of Items", "number of items", "Color/ Finish", "color/finish", "Size for Bullet", "size for bullet", "Installation Type", "installation type", "Pattern", "pattern"] },
-      { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "compatible with", "Exterior Finish", "exterior finish", "Color", "color", "Size for Attribute", "size for attribute", "Size Digit", "size digit", "finish code", "Model Brand Part Fits", "model brand part fits", "OEM Equivalent Part Number", "Retention Attrbute", "retention attribute", "Included Components", "included components", "Generic Keywords", "generic keywords"] },
-      { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Item Length", "item length", "Item Package Length", "item package length", "Package Length Unit", "package length unit", "Item Package Width", "item package width", "Package Width Unit", "package width unit", "Item Package Height", "item package height", "Package Height Unit", "package height unit", "Package Weight", "package weight", "Package Weight Unit", "package weight unit"] },
-      { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Fitment Type", "fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }
-    ]
-  },
-  { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-  { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "Main Listing SKU", "SKU", "MPN"] }] },
-  { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
-  { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
-  { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
-  { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
-  { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
-];
-
-const PRODUCT_CATEGORIES = [
-  { id: 'global', label: '🌍 Global Master Sheet', file: 'N/A' },
-  { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
-  { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
-  { id: 'center_caps', label: 'Center Caps', file: 'masterlist_center_caps.csv' },
-  { id: 'grille_inserts', label: 'Grille Inserts', file: 'masterlist_grille_inserts.csv' }
-];
-
 function MasterlistWorkspace() {
   const [activeCategory, setActiveCategory] = useState(PRODUCT_CATEGORIES[0].id);
   const [dataCache, setDataCache] = useState<Record<string, any[]>>({});
@@ -1566,6 +1505,9 @@ function MasterlistWorkspace() {
   );
 }
 
+// ==========================================
+// 8. MODULE: MASTER CATALOG
+// ==========================================
 function MasterCatalog() {
   const [activeTab, setActiveTab] = useState('viewer');
   const [viewMode, setViewMode] = useState('catalog');
@@ -1618,14 +1560,12 @@ function MasterCatalog() {
 
   const handleSaveEditor = async () => {
     if (!editFile) return alert("Please select a file.");
-    const coreCols = ["asin", "brand", "title", "list_price", "bullet_point_1"];
     const records = editableRows.map(row => {
-      const rawData: Record<string, string> = {};
-      Object.keys(row).forEach(k => { if (!coreCols.includes(k) && k !== 'batch_name') rawData[k] = row[k]; });
-      return {
-        batch_name: editFile, asin: String(row.asin || row.ASIN || ''), brand: String(row.brand || row.Brand || ''),
-        title: String(row.title || row.Title || ''), list_price: String(row.list_price || ''), bullet_point_1: String(row.bullet_point_1 || ''), raw_sheet_data: JSON.stringify(rawData)
-      };
+      const obj: Record<string, string> = { batch_name: editFile };
+      CATALOG_HEADERS.forEach(h => {
+        obj[h] = String(row[h] || '');
+      });
+      return obj;
     });
     await safeUploadTextToB2(toCSV(records), editFile, 'snapshots/');
     setRefreshTrigger(r => r + 1);
@@ -1729,7 +1669,11 @@ function MasterCatalog() {
                       </tbody>
                     </table>
                   </div>
-                ) : <div className="p-8 text-center text-slate-500 border border-dashed rounded-lg bg-slate-50">No data loaded. Select files and click "Load Selected Files".</div>}
+                ) : (
+                  <div className="p-8 text-center text-slate-500 border border-dashed rounded-lg bg-slate-50">
+                    No data loaded. Select files and click &quot;Load Selected Files&quot;.
+                  </div>
+                )}
               </>
             );
           })()}
@@ -1753,18 +1697,23 @@ function MasterCatalog() {
             <Card className="p-6 space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-semibold text-slate-700">Editing Snapshot: {editFile}</span>
-                <Button variant="outline" onClick={() => setEditableRows(prev => prev.concat([{ asin: "NEW_ASIN", title: "New Product Title", brand: "Brand", list_price: "0.00" }]))}>+ Add Row</Button>
+                <Button variant="outline" onClick={() => {
+                  const newRow: any = {};
+                  CATALOG_HEADERS.forEach(h => newRow[h] = '');
+                  newRow.ASIN = 'NEW_ASIN';
+                  setEditableRows(prev => prev.concat([newRow]));
+                }}>+ Add Row</Button>
               </div>
 
               <div className="overflow-x-auto max-h-[500px] border border-slate-200 rounded-lg">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-slate-100 sticky top-0 text-slate-700 border-b">
-                    <tr>{Object.keys(editableRows[0]).map(k => <th key={k} className="p-2 whitespace-nowrap">{k}</th>)}<th className="p-2">Actions</th></tr>
+                    <tr>{CATALOG_HEADERS.map(k => <th key={k} className="p-2 whitespace-nowrap">{k}</th>)}<th className="p-2">Actions</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {editableRows.slice(0, 500).map((row, rowIndex) => (
                       <tr key={rowIndex} className="hover:bg-slate-50">
-                        {Object.keys(editableRows[0]).map(colKey => (
+                        {CATALOG_HEADERS.map(colKey => (
                           <td key={colKey} className="p-1 min-w-[120px]"><input type="text" value={row[colKey] || ''} onChange={e => { const val = e.target.value; setEditableRows(prev => prev.map((r, i) => i === rowIndex ? { ...r, [colKey]: val } : r)); }} className="w-full p-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500" /></td>
                         ))}
                         <td className="p-1 text-center"><Button variant="danger" onClick={() => setEditableRows(prev => prev.filter((_, i) => i !== rowIndex))} className="text-xs py-1 px-2">Del</Button></td>
@@ -1782,6 +1731,9 @@ function MasterCatalog() {
   );
 }
 
+// ==========================================
+// 9. MODULE: ASIN DEEP DIVE
+// ==========================================
 function AsinDeepDive() {
   const [refreshTrigger] = useState(0);
   const snapshots = useB2Files('snapshots/', refreshTrigger);
@@ -1808,14 +1760,9 @@ function AsinDeepDive() {
 
     if (Object.keys(oldRecord).length === 0 && Object.keys(newRecord).length === 0) return alert(`ASIN '${ddAsin}' not found in either snapshot.`);
 
-    const allKeysSet = new Set<string>();
-    Object.keys(oldRecord).forEach(k => allKeysSet.add(k));
-    Object.keys(newRecord).forEach(k => allKeysSet.add(k));
-    const allKeys = Array.from(allKeysSet).sort();
-    
     const buyboxKeywords = ["buy_box", "buybox", "featured_offer", "featured_merchant"];
 
-    let comparison = allKeys.map(k => {
+    let comparison = CATALOG_HEADERS.map(k => {
       const valO = String(oldRecord[k] || '');
       const valN = String(newRecord[k] || '');
       return { Field: k, "Older Value": valO, "Newer Value": valN, "Changed?": valO !== valN ? "Yes" : "No", isBuyBox: buyboxKeywords.some(kw => k.toLowerCase().includes(kw)) };
@@ -1873,6 +1820,9 @@ function AsinDeepDive() {
   );
 }
 
+// ==========================================
+// 10. MODULE: GLOBAL DELTA VIEW
+// ==========================================
 function GlobalDeltaView() {
   const [refreshTrigger] = useState(0);
   const snapshots = useB2Files('snapshots/', refreshTrigger);
@@ -1906,30 +1856,25 @@ function GlobalDeltaView() {
     
     const buyboxKeywords = ["buy_box", "buybox", "featured_offer", "featured_merchant"];
 
-    const allBaseColsSet = new Set<string>();
-    oldData.forEach(r => Object.keys(r).forEach(k => { if (k.toLowerCase() !== 'asin') allBaseColsSet.add(k); }));
-    newData.forEach(r => Object.keys(r).forEach(k => { if (k.toLowerCase() !== 'asin') allBaseColsSet.add(k); }));
-
-    const allBaseCols = Array.from(allBaseColsSet);
-    const bbCols = allBaseCols.filter(c => buyboxKeywords.some(kw => c.toLowerCase().includes(kw)));
-    
-    const coreOrder = ["title", "list_price", "brand", ...bbCols, "bullet_point_1", "bullet_point_2", "bullet_point_3", "bullet_point_4", "bullet_point_5"];
-
-    const sortedBaseCols = coreOrder.filter(c => allBaseCols.includes(c)).concat(allBaseCols.filter(c => !coreOrder.includes(c)).sort());
-
     let fullRows = mergedAsins.map(asin => {
       const oldRow = oldMap.get(asin) || {};
       const newRow = newMap.get(asin) || {};
       const rowObj: Record<string, string> = { ASIN: asin };
-      sortedBaseCols.forEach(col => {
-        rowObj[`${col} (Old)`] = String(oldRow[col] || '');
-        rowObj[`${col} (New)`] = String(newRow[col] || '');
+      CATALOG_HEADERS.forEach(col => {
+        const oldVal = Object.keys(oldRow).find(k => k.toLowerCase() === col.toLowerCase());
+        const newVal = Object.keys(newRow).find(k => k.toLowerCase() === col.toLowerCase());
+        rowObj[`${col} (Old)`] = String(oldVal ? oldRow[oldVal] : '');
+        rowObj[`${col} (New)`] = String(newVal ? newRow[newVal] : '');
       });
       return rowObj;
     });
 
-    if (deltaBuyboxOnly) fullRows = fullRows.filter(row => bbCols.some(c => row[`${c} (Old)`] !== row[`${c} (New)`]));
-    else if (deltaModifiedOnly) fullRows = fullRows.filter(row => sortedBaseCols.some(c => row[`${c} (Old)`] !== row[`${c} (New)`]));
+    if (deltaBuyboxOnly) {
+      const bbCols = CATALOG_HEADERS.filter(c => buyboxKeywords.some(kw => c.toLowerCase().includes(kw)));
+      fullRows = fullRows.filter(row => bbCols.some(c => row[`${c} (Old)`] !== row[`${c} (New)`]));
+    } else if (deltaModifiedOnly) {
+      fullRows = fullRows.filter(row => CATALOG_HEADERS.some(c => row[`${c} (Old)`] !== row[`${c} (New)`]));
+    }
 
     setDeltaDisplayData(fullRows);
   };
@@ -2007,6 +1952,9 @@ function GlobalDeltaView() {
   );
 }
 
+// ==========================================
+// 11. MODULE: ADS ANALYSIS
+// ==========================================
 const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
   return data.filter(row => {
     return Object.entries(filters).every(([key, filterValue]) => {
@@ -2035,17 +1983,6 @@ const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
     });
   });
 };
-
-const ADS_LEADERBOARD_HEADERS = [
-  "Start Date", "End Date", "Portfolio name", "Currency", "Campaign Name", 
-  "Ad Group Name", "Retailer", "Country", "Targeting", "Match Type", 
-  "Customer Search Term", "Impressions", "Clicks", "Click-Thru Rate (CTR)", 
-  "Cost Per Click (CPC)", "Spend", "7 Day Total Sales", 
-  "Total Advertising Cost of Sales (ACOS)", "Total Return on Advertising Spend (ROAS)", 
-  "7 Day Total Orders (#)", "7 Day Total Units (#)", "7 Day Conversion Rate", 
-  "7 Day Advertised SKU Units (#)", "7 Day Other SKU Units (#)", 
-  "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
-];
 
 function AdsAnalysis() {
   const [activeTab, setActiveTab] = useState('perf');
@@ -2084,7 +2021,11 @@ function AdsAnalysis() {
     raw: { key: '', dir: 'asc' }
   });
 
-  const [visibleAdColumns, setVisibleAdColumns] = useState<Set<string>>(new Set(ADS_LEADERBOARD_HEADERS));
+  const [visibleAdColumns, setVisibleAdColumns] = useState<Set<string>>(new Set([
+    'Campaign Name', 'Match Type', 'Targeting', 'Impressions', 'Clicks', 
+    'Click-Thru Rate (CTR)', 'Cost Per Click (CPC)', 'Spend', '7 Day Total Sales', 'Total Advertising Cost of Sales (ACOS)', 
+    'Total Return on Advertising Spend (ROAS)', '7 Day Total Orders (#)', '7 Day Total Units (#)', '7 Day Conversion Rate'
+  ]));
   const [showAdColumnFilter, setShowAdColumnFilter] = useState(false);
   const visibleHeaders = ADS_LEADERBOARD_HEADERS.filter(col => visibleAdColumns.has(col));
 
@@ -2251,6 +2192,11 @@ function AdsAnalysis() {
       data['Total Return on Advertising Spend (ROAS)'] = spend > 0 ? sales / spend : 0;
       data['7 Day Conversion Rate'] = clicks > 0 ? (orders / clicks) * 100 : 0;
 
+      // Use the correct internal name field based on what is being aggregated
+      if (groupByKey === 'Campaign Name') data['Campaign Name'] = name;
+      else if (groupByKey === 'Ad Group Name') data['Ad Group Name'] = name;
+      else if (groupByKey === 'Customer Search Term') data['Customer Search Term'] = name;
+
       return data;
     }).sort((a, b) => sortBySales ? b['7 Day Total Sales'] - a['7 Day Total Sales'] : b['Spend'] - a['Spend']).slice(0, limit);
   };
@@ -2371,12 +2317,12 @@ function AdsAnalysis() {
                   <List className="w-4 h-4 mr-2" /> Metrics ({visibleAdColumns.size}/{ADS_LEADERBOARD_HEADERS.length})
                 </Button>
                 {showAdColumnFilter && (
-                  <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-64 max-h-96 flex flex-col animate-in slide-in-from-top-2">
+                  <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-64 max-h-[400px] flex flex-col animate-in slide-in-from-top-2">
                     <div className="flex justify-between items-center mb-3">
                       <h4 className="font-bold text-slate-800">Show Metrics</h4>
                       <div className="flex space-x-2">
                         <button onClick={() => setVisibleAdColumns(new Set(ADS_LEADERBOARD_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
-                        <button onClick={() => setVisibleAdColumns(new Set(["Campaign Name"]))} className="text-xs text-slate-500 hover:underline">Clear</button>
+                        <button onClick={() => setVisibleAdColumns(new Set(['Campaign Name', 'Ad Group Name', 'Customer Search Term']))} className="text-xs text-slate-500 hover:underline">Clear</button>
                       </div>
                     </div>
                     <div className="overflow-y-auto flex-1 space-y-2 pr-2">
@@ -2393,7 +2339,7 @@ function AdsAnalysis() {
                             }}
                             className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                           />
-                          <span className="truncate">{col}</span>
+                          <span className="truncate" title={col}>{col}</span>
                         </label>
                       ))}
                     </div>
@@ -2644,6 +2590,9 @@ function AdsAnalysis() {
   );
 }
 
+// ==========================================
+// 12. MODULE: SEO INTELLIGENCE
+// ==========================================
 function SeoIntelligence() {
   const [activeTab, setActiveTab] = useState('audit');
   const [refreshTrigger] = useState(0);
@@ -2968,20 +2917,202 @@ function SeoIntelligence() {
 }
 
 // ==========================================
-// PLACEHOLDER: CATALOG MONITOR (To satisfy TS checks)
+// 13. MODULE: CATALOG MONITOR
 // ==========================================
 function CatalogMonitor() {
+  const [refreshTrigger] = useState(0);
+  const snapshots = useB2Files('snapshots/', refreshTrigger);
+  const [cmOld, setCmOld] = useState('');
+  const [cmNew, setCmNew] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [results, setResults] = useState<any>(null);
+
+  useEffect(() => {
+    if (snapshots.length >= 2) {
+      if (!cmOld) setCmOld(snapshots[0]);
+      if (!cmNew) setCmNew(snapshots[snapshots.length - 1]);
+    }
+  }, [snapshots.length]);
+
+  const runAnalysis = async () => {
+    if (!cmOld || !cmNew) return alert("Select both a Baseline and a Target snapshot.");
+    setIsAnalyzing(true);
+    
+    const oldData = parseCSVTable(await safeGetFileContent(cmOld, 'snapshots/')).map(unpackRecord);
+    const newData = parseCSVTable(await safeGetFileContent(cmNew, 'snapshots/')).map(unpackRecord);
+
+    const oldMap = new Map(oldData.map(r => [r.asin || r.ASIN, r]));
+    
+    const changeLog: any[] = [];
+    const columnChangeCounts: Record<string, number> = {};
+    let totalAnalyzed = 0;
+    const affectedAsins = new Set<string>();
+
+    const getField = (row: any, header: string) => {
+      const found = Object.keys(row).find(k => k.toLowerCase() === header.toLowerCase());
+      return found ? String(row[found] || '').trim() : undefined;
+    };
+
+    newData.forEach(newRow => {
+      const asin = newRow.asin || newRow.ASIN;
+      if (!asin) return;
+      const oldRow = oldMap.get(asin);
+      if (!oldRow) return;
+
+      totalAnalyzed++;
+      let hasChange = false;
+
+      // Dynamically scan ALL headers
+      CATALOG_HEADERS.forEach(col => {
+        if (col.toLowerCase() === 'asin' || col.toLowerCase() === 'run') return; // Skip identifiers
+
+        const oldVal = getField(oldRow, col);
+        const newVal = getField(newRow, col);
+
+        // If both exist and don't match, flag it
+        if (oldVal !== undefined && newVal !== undefined && oldVal !== newVal) {
+          hasChange = true;
+          
+          // Tally the exact column that changed for the Pie Chart
+          columnChangeCounts[col] = (columnChangeCounts[col] || 0) + 1;
+
+          changeLog.push({ 
+            ASIN: asin, 
+            "Flag Type": col, 
+            "Baseline (Old)": oldVal, 
+            "Target (New)": newVal 
+          });
+        }
+      });
+
+      if (hasChange) affectedAsins.add(asin);
+    });
+
+    setResults({
+      totalAnalyzed,
+      totalFlags: changeLog.length,
+      affectedAsinsCount: affectedAsins.size,
+      columnChangeCounts,
+      changeLog
+    });
+    setIsAnalyzing(false);
+  };
+
+  // Expanded color palette to handle many distinct column changes
+  const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316', '#0ea5e9', '#6366f1', '#84cc16', '#eab308'];
+  
+  // Transform the column counts into dynamic pie chart data, sorted largest to smallest
+  const pieData = results ? Object.entries(results.columnChangeCounts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a: any, b: any) => b.value - a.value) : [];
+
   return (
-    <Card className="p-12 text-center text-slate-500">
-      <Activity className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-      <h2 className="text-xl font-bold text-slate-700 mb-2">Catalog Monitor</h2>
-      <p>This module is currently active but waiting for configuration data.</p>
-    </Card>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
+        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 71 catalog data points.</p>
+      </div>
+
+      <Card className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Safe State)</label>
+            <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmOld} onChange={e => setCmOld(e.target.value)}>
+              {snapshots.length === 0 && <option value="">No snapshots found</option>}
+              {snapshots.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Current State)</label>
+            <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmNew} onChange={e => setCmNew(e.target.value)}>
+              {snapshots.length === 0 && <option value="">No snapshots found</option>}
+              {snapshots.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <Button onClick={runAnalysis} disabled={isAnalyzing} className="w-full sm:w-auto">
+          {isAnalyzing ? 'Scanning Catalog...' : 'Run Full Catalog Scan'}
+        </Button>
+      </Card>
+
+      {results && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="p-6 flex flex-col items-center justify-center bg-blue-50/50 border-blue-200">
+              <p className="text-sm font-bold text-blue-800 uppercase tracking-wider">Total ASINs Scanned</p>
+              <p className="text-5xl font-black text-blue-600 mt-2">{results.totalAnalyzed}</p>
+            </Card>
+            <Card className="p-6 flex flex-col items-center justify-center bg-red-50/50 border-red-200">
+              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Unauthorized Flags</p>
+              <p className="text-5xl font-black text-red-600 mt-2">{results.totalFlags}</p>
+            </Card>
+            <Card className="p-6 flex flex-col items-center justify-center bg-amber-50/50 border-amber-200">
+              <p className="text-sm font-bold text-amber-800 uppercase tracking-wider">Affected Listings</p>
+              <p className="text-5xl font-black text-amber-600 mt-2">{results.affectedAsinsCount}</p>
+            </Card>
+          </div>
+
+          {results.totalFlags > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="p-6 lg:col-span-1 flex flex-col items-center">
+                <h3 className="font-bold text-slate-800 mb-4 w-full border-b pb-2">Flag Distribution</h3>
+                <div className="w-full h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                      <Legend verticalAlign="bottom" height={72} className="text-xs" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              <Card className="p-6 lg:col-span-2 flex flex-col">
+                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                  <h3 className="font-bold text-slate-800">Catalog Change Ledger</h3>
+                  <Button onClick={() => downloadCSV(results.changeLog, `catalog_monitor_flags.csv`)} className="py-1 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export Flags</Button>
+                </div>
+                <div className="overflow-x-auto flex-1 max-h-[350px]">
+                  <table className="w-full text-xs text-left whitespace-nowrap">
+                    <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
+                      <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Baseline (Safe)</th><th className="p-2">Target (Current)</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {results.changeLog.map((r: any, i: number) => {
+                        let rowColor = 'hover:bg-slate-50';
+                        if (r["Flag Type"].toLowerCase().includes('price') || r["Flag Type"].toLowerCase().includes('cost')) rowColor = 'bg-amber-50 hover:bg-amber-100 text-amber-900';
+                        if (r["Flag Type"].toLowerCase().includes('buy box')) rowColor = 'bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium';
+                        return (
+                          <tr key={i} className={rowColor}>
+                            <td className="p-2 font-mono font-bold text-slate-800">{r.ASIN}</td>
+                            <td className="p-2 font-semibold">{r["Flag Type"]}</td>
+                            <td className="p-2 truncate max-w-[200px] text-emerald-700">{r["Baseline (Old)"]}</td>
+                            <td className="p-2 truncate max-w-[200px] text-red-700">{r["Target (New)"]}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          ) : (
+            <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
+              <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
+              <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
+              <p className="text-emerald-700">No unauthorized changes were detected between the Baseline and Target snapshots.</p>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 // ==========================================
-// 10. MAIN APPLICATION WRAPPER
+// 14. MAIN APPLICATION WRAPPER
 // ==========================================
 export default function Page() {
   const [activeModule, setActiveModule] = useState('ingestion');
