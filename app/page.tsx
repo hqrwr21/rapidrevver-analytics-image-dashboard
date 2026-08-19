@@ -3053,17 +3053,20 @@ function SeoIntelligence() {
 // 13. MODULE: CATALOG MONITOR
 // ==========================================
 function CatalogMonitor() {
-  const [refreshTrigger] = useState(0);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const snapshots = useB2Files('snapshots/', refreshTrigger);
+  const savedReports = useB2Files('reports/', refreshTrigger);
   const [cmOld, setCmOld] = useState('');
   const [cmNew, setCmNew] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<any>(null);
 
-  // New interactive column filter states
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(CATALOG_HEADERS));
   const [showColumnFilter, setShowColumnFilter] = useState(false);
   const [flagFilterSearch, setFlagFilterSearch] = useState('');
+
+  const [reportName, setReportName] = useState('');
+  const [isSavingReport, setIsSavingReport] = useState(false);
 
   useEffect(() => {
     if (snapshots.length >= 2) {
@@ -3132,13 +3135,27 @@ function CatalogMonitor() {
     setIsAnalyzing(false);
   };
 
-  // Apply the interactive filter to the change log instantly
+  const handleSaveReport = async () => {
+    if (!reportName.trim()) return alert("Please enter a report name.");
+    setIsSavingReport(true);
+    const fileName = reportName.trim().endsWith('.csv') ? reportName.trim() : `${reportName.trim()}.csv`;
+    const csvData = toCSV(filteredChangeLog);
+    const success = await safeUploadTextToB2(csvData, fileName, 'reports/');
+    setIsSavingReport(false);
+    if (success) {
+      alert(`Analysis report saved as ${fileName}!`);
+      setReportName('');
+      setRefreshTrigger(prev => prev + 1);
+    } else {
+      alert("Failed to save report.");
+    }
+  };
+
   const filteredChangeLog = useMemo(() => {
     if (!results) return [];
     return results.changeLog.filter((row: any) => visibleColumns.has(row["Flag Type"]));
   }, [results, visibleColumns]);
 
-  // Re-aggregate the pie chart dynamically based on the filtered change log
   const filteredPieData = useMemo(() => {
     if (!results) return [];
     const tempCounts: Record<string, number> = {};
@@ -3156,20 +3173,20 @@ function CatalogMonitor() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
-        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 71 catalog data points.</p>
+        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 124 catalog data points.</p>
       </div>
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Past Data</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Safe State)</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmOld} onChange={e => setCmOld(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Recent Data</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Current State)</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmNew} onChange={e => setCmNew(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
@@ -3189,7 +3206,7 @@ function CatalogMonitor() {
               </Button>
               
               {showColumnFilter && (
-                <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-72 max-h-[400px] flex flex-col animate-in slide-in-from-top-2 z-50">
+                <div className="absolute right-0 top-12 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-72 max-h-96 flex flex-col animate-in slide-in-from-top-2 z-50">
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="font-bold text-slate-800">Attributes to Monitor</h4>
                     <div className="flex space-x-2">
@@ -3240,7 +3257,7 @@ function CatalogMonitor() {
               <p className="text-5xl font-black text-blue-600 mt-2">{results.totalAnalyzed}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-red-50/50 border-red-200">
-              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Flagged</p>
+              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Visible Flags</p>
               <p className="text-5xl font-black text-red-600 mt-2">{filteredChangeLog.length}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-amber-50/50 border-amber-200">
@@ -3253,7 +3270,7 @@ function CatalogMonitor() {
             <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
               <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
-              <p className="text-emerald-700">No unauthorized changes were detected between the Past and Recent data.</p>
+              <p className="text-emerald-700">No unauthorized changes were detected between the Baseline and Target snapshots.</p>
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3279,16 +3296,29 @@ function CatalogMonitor() {
               <Card className="p-6 lg:col-span-2 flex flex-col">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-2 gap-4">
                   <h3 className="font-bold text-slate-800">Catalog Change Ledger</h3>
-                  <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} disabled={filteredChangeLog.length === 0} className="py-1 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                  
+                  <div className="flex items-center space-x-2 relative w-full sm:w-auto">
+                    <input 
+                      type="text" 
+                      placeholder="Name this report..." 
+                      value={reportName}
+                      onChange={e => setReportName(e.target.value)}
+                      className="p-1.5 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 w-32 sm:w-40"
+                    />
+                    <Button onClick={handleSaveReport} disabled={isSavingReport || !reportName.trim() || filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 border-none text-white whitespace-nowrap">
+                      <Database className="w-3 h-3 mr-1" /> {isSavingReport ? 'Saving...' : 'Save DB'}
+                    </Button>
+                    <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} disabled={filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs whitespace-nowrap"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                  </div>
                 </div>
 
                 {filteredChangeLog.length > 0 ? (
                   <div className="overflow-x-auto flex-1 max-h-[350px]">
                     <table className="w-full text-xs text-left whitespace-nowrap">
                       <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
-                        <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Past</th><th className="p-2">Recent</th></tr>
+                        <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Baseline (Safe)</th><th className="p-2">Target (Current)</th></tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100"> 
+                      <tbody className="divide-y divide-slate-100">
                         {filteredChangeLog.map((r: any, i: number) => {
                           let rowColor = 'hover:bg-slate-50';
                           if (r["Flag Type"].toLowerCase().includes('price') || r["Flag Type"].toLowerCase().includes('cost')) rowColor = 'bg-amber-50 hover:bg-amber-100 text-amber-900';
@@ -3316,6 +3346,33 @@ function CatalogMonitor() {
             </div>
           )}
         </>
+      )}
+
+      {savedReports.length > 0 && (
+        <Card className="p-6 mt-6">
+          <h3 className="font-bold text-slate-800 mb-4">Saved Monitor Reports</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {savedReports.map(report => (
+              <div key={report} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="flex items-center space-x-2 text-sm text-slate-700 truncate mr-2">
+                  <FileSpreadsheet className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="font-medium truncate" title={report}>{report}</span>
+                </div>
+                <div className="flex space-x-1 flex-shrink-0">
+                  <button onClick={async () => {
+                    const content = await safeGetFileContent(report, 'reports/');
+                    downloadCSV(parseCSVTable(content), report);
+                  }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded" title="Download"><Download className="w-4 h-4"/></button>
+                  <button onClick={async () => {
+                    if(!window.confirm(`Delete ${report}?`)) return;
+                    await deleteFileFromB2(report, 'reports/');
+                    setRefreshTrigger(r => r + 1);
+                  }} className="p-1.5 text-red-600 hover:bg-red-100 rounded" title="Delete"><Trash2 className="w-4 h-4"/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
     </div>
   );
