@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
   Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check,
-  List, ShoppingCart, Store, ShoppingBag
+  List, ShoppingCart, Store, ShoppingBag, Eye
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1201,31 +1201,21 @@ function ImageVault() {
                 return (
                   <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none" /></div>
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" /></div>
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
                     
-                    <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                       {editingImage === uniqueImgKey ? (
                         <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
-                          <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
-                          <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
+                        <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
+                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span>
+                          <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
                         </div>
                       )}
-
-                      <div className="space-y-1 mt-auto">
-                        <div className="grid grid-cols-2 gap-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
-                        </div>
-                        <div className="flex space-x-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
-                          <button onClick={() => handleDeleteImage(imgName, activeAlbum)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
-                        </div>
-                      </div>
+                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
                     </div>
                   </div>
                 );
@@ -2316,7 +2306,6 @@ function AdsAnalysis() {
       data['Total Return on Advertising Spend (ROAS)'] = spend > 0 ? sales / spend : 0;
       data['7 Day Conversion Rate'] = clicks > 0 ? (orders / clicks) * 100 : 0;
 
-      // Use the correct internal name field based on what is being aggregated
       if (groupByKey === 'Campaign Name') data['Campaign Name'] = name;
       else if (groupByKey === 'Ad Group Name') data['Ad Group Name'] = name;
       else if (groupByKey === 'Customer Search Term') data['Customer Search Term'] = name;
@@ -3067,6 +3056,7 @@ function CatalogMonitor() {
 
   const [reportName, setReportName] = useState('');
   const [isSavingReport, setIsSavingReport] = useState(false);
+  const [viewingReport, setViewingReport] = useState<{name: string, data: any[]} | null>(null);
 
   useEffect(() => {
     if (snapshots.length >= 2) {
@@ -3171,6 +3161,48 @@ function CatalogMonitor() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {viewingReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-md flex items-center justify-center"><FileSpreadsheet className="w-5 h-5 text-blue-600" /></div>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900">{viewingReport.name}</h3>
+                  <p className="text-xs text-slate-500">Saved Report Viewer</p>
+                </div>
+              </div>
+              <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-auto p-0">
+              <table className="w-full text-xs text-left whitespace-nowrap">
+                <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
+                  <tr>
+                    {Object.keys(viewingReport.data[0] || {}).map(k => <th key={k} className="p-3 font-semibold border-b border-slate-200">{k}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {viewingReport.data.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      {Object.values(row).map((val: any, j) => <td key={j} className="p-3 truncate max-w-[300px]">{val}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {viewingReport.data.length === 0 && <div className="p-8 text-center text-slate-500">Report is empty.</div>}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+              <span className="text-xs text-slate-500 font-medium">{viewingReport.data.length} rows</span>
+              <div className="flex space-x-2">
+                <Button variant="outline" onClick={() => downloadCSV(viewingReport.data, viewingReport.name)}><Download className="w-4 h-4 mr-2"/> Download</Button>
+                <Button onClick={() => setViewingReport(null)}>Close</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
         <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 124 catalog data points.</p>
@@ -3359,6 +3391,10 @@ function CatalogMonitor() {
                   <span className="font-medium truncate" title={report}>{report}</span>
                 </div>
                 <div className="flex space-x-1 flex-shrink-0">
+                  <button onClick={async () => {
+                    const content = await safeGetFileContent(report, 'reports/');
+                    setViewingReport({ name: report, data: parseCSVTable(content) });
+                  }} className="p-1.5 text-emerald-600 hover:bg-emerald-100 rounded" title="View Report"><Eye className="w-4 h-4"/></button>
                   <button onClick={async () => {
                     const content = await safeGetFileContent(report, 'reports/');
                     downloadCSV(parseCSVTable(content), report);
