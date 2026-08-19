@@ -1045,7 +1045,7 @@ function ImageVault() {
                   );
                 })}
               </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>}
+            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images contain "{albumSearch}".</div>}
           </Card>
         )}
       </div>
@@ -1206,16 +1206,16 @@ function ImageVault() {
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
                     
-                    <div className="p-3 border-t border-slate-100 space-y-3 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
+                    <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between" onClick={e => e.stopPropagation()}>
                       {editingImage === uniqueImgKey ? (
-                        <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
+                        <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum as string); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum as string)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                       ) : (
-                        <div className="flex flex-col gap-1 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
-                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{imgObj.album}</span>
-                          <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
+                        <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
+                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{activeAlbum}</span>
+                          <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
                         </div>
                       )}
-                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
+                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum as string)}><Trash2 className="w-3 h-3" /></Button></div>
                     </div>
                   </div>
                 );
