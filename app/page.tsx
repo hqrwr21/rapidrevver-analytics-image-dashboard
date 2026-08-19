@@ -3056,7 +3056,6 @@ function CatalogMonitor() {
 
   const [reportName, setReportName] = useState('');
   const [isSavingReport, setIsSavingReport] = useState(false);
-  const [viewingReport, setViewingReport] = useState<{name: string, data: any[]} | null>(null);
 
   useEffect(() => {
     if (snapshots.length >= 2) {
@@ -3120,8 +3119,10 @@ function CatalogMonitor() {
       totalFlags: changeLog.length,
       affectedAsinsCount: affectedAsins.size,
       columnChangeCounts,
-      changeLog
+      changeLog,
+      isSavedView: false
     });
+    setVisibleColumns(new Set(CATALOG_HEADERS));
     setIsAnalyzing(false);
   };
 
@@ -3161,48 +3162,6 @@ function CatalogMonitor() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      
-      {viewingReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-md flex items-center justify-center"><FileSpreadsheet className="w-5 h-5 text-blue-600" /></div>
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900">{viewingReport.name}</h3>
-                  <p className="text-xs text-slate-500">Saved Report Viewer</p>
-                </div>
-              </div>
-              <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="flex-1 overflow-auto p-0">
-              <table className="w-full text-xs text-left whitespace-nowrap">
-                <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
-                  <tr>
-                    {Object.keys(viewingReport.data[0] || {}).map(k => <th key={k} className="p-3 font-semibold border-b border-slate-200">{k}</th>)}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {viewingReport.data.map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-50">
-                      {Object.values(row).map((val: any, j) => <td key={j} className="p-3 truncate max-w-[300px]">{val}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {viewingReport.data.length === 0 && <div className="p-8 text-center text-slate-500">Report is empty.</div>}
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
-              <span className="text-xs text-slate-500 font-medium">{viewingReport.data.length} rows</span>
-              <div className="flex space-x-2">
-                <Button variant="outline" onClick={() => downloadCSV(viewingReport.data, viewingReport.name)}><Download className="w-4 h-4 mr-2"/> Download</Button>
-                <Button onClick={() => setViewingReport(null)}>Close</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
         <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 124 catalog data points.</p>
@@ -3234,7 +3193,7 @@ function CatalogMonitor() {
           {results && (
             <div className="relative w-full sm:w-auto">
               <Button variant="secondary" onClick={() => setShowColumnFilter(!showColumnFilter)} className="bg-white border w-full sm:w-auto">
-                <List className="w-4 h-4 mr-2" /> Filter Flags ({visibleColumns.size}/{CATALOG_HEADERS.length})
+                <List className="w-4 h-4 mr-2" /> Filter Flags ({visibleColumns.size}/{results.isSavedView ? Object.keys(results.columnChangeCounts).length : CATALOG_HEADERS.length})
               </Button>
               
               {showColumnFilter && (
@@ -3242,7 +3201,7 @@ function CatalogMonitor() {
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="font-bold text-slate-800">Attributes to Monitor</h4>
                     <div className="flex space-x-2">
-                      <button onClick={() => setVisibleColumns(new Set(CATALOG_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
+                      <button onClick={() => setVisibleColumns(new Set(results.isSavedView ? Object.keys(results.columnChangeCounts) : CATALOG_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
                       <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
                     </div>
                   </div>
@@ -3256,7 +3215,7 @@ function CatalogMonitor() {
                   />
 
                   <div className="overflow-y-auto flex-1 space-y-2 pr-2 text-left">
-                    {CATALOG_HEADERS.filter(col => col.toLowerCase().includes(flagFilterSearch.toLowerCase())).map(col => (
+                    {(results.isSavedView ? Object.keys(results.columnChangeCounts) : CATALOG_HEADERS).filter(col => col.toLowerCase().includes(flagFilterSearch.toLowerCase())).map(col => (
                       <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
                         <input 
                           type="checkbox" 
@@ -3282,7 +3241,20 @@ function CatalogMonitor() {
       </Card>
 
       {results && (
-        <>
+        <div className="animate-in fade-in duration-500 space-y-6">
+          {results.isSavedView && (
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-sm gap-4">
+              <div className="flex items-center space-x-3 text-blue-900">
+                <FileSpreadsheet className="w-6 h-6 text-blue-600" />
+                <div>
+                  <h3 className="font-bold text-sm">Viewing Saved Historical Report</h3>
+                  <p className="text-xs text-blue-700 font-medium">{results.reportName}</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => setResults(null)} className="bg-white text-blue-700 hover:bg-blue-100 border-blue-300">Close Report</Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="p-6 flex flex-col items-center justify-center bg-blue-50/50 border-blue-200">
               <p className="text-sm font-bold text-blue-800 uppercase tracking-wider">Total ASINs Scanned</p>
@@ -3330,17 +3302,21 @@ function CatalogMonitor() {
                   <h3 className="font-bold text-slate-800">Catalog Change Ledger</h3>
                   
                   <div className="flex items-center space-x-2 relative w-full sm:w-auto">
-                    <input 
-                      type="text" 
-                      placeholder="Name this report..." 
-                      value={reportName}
-                      onChange={e => setReportName(e.target.value)}
-                      className="p-1.5 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 w-32 sm:w-40"
-                    />
-                    <Button onClick={handleSaveReport} disabled={isSavingReport || !reportName.trim() || filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 border-none text-white whitespace-nowrap">
-                      <Database className="w-3 h-3 mr-1" /> {isSavingReport ? 'Saving...' : 'Save DB'}
-                    </Button>
-                    <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} disabled={filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs whitespace-nowrap"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                    {!results.isSavedView && (
+                      <>
+                        <input 
+                          type="text" 
+                          placeholder="Name this report..." 
+                          value={reportName}
+                          onChange={e => setReportName(e.target.value)}
+                          className="p-1.5 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 w-32 sm:w-40"
+                        />
+                        <Button onClick={handleSaveReport} disabled={isSavingReport || !reportName.trim() || filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 border-none text-white whitespace-nowrap">
+                          <Database className="w-3 h-3 mr-1" /> {isSavingReport ? 'Saving...' : 'Save DB'}
+                        </Button>
+                      </>
+                    )}
+                    <Button onClick={() => downloadCSV(filteredChangeLog, results.isSavedView ? results.reportName : `catalog_monitor_flags.csv`)} disabled={filteredChangeLog.length === 0} className="py-1.5 px-3 text-xs whitespace-nowrap"><Download className="w-3 h-3 mr-1" /> Export</Button>
                   </div>
                 </div>
 
@@ -3377,7 +3353,7 @@ function CatalogMonitor() {
               </Card>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {savedReports.length > 0 && (
@@ -3393,8 +3369,31 @@ function CatalogMonitor() {
                 <div className="flex space-x-1 flex-shrink-0">
                   <button onClick={async () => {
                     const content = await safeGetFileContent(report, 'reports/');
-                    setViewingReport({ name: report, data: parseCSVTable(content) });
-                  }} className="p-1.5 text-emerald-600 hover:bg-emerald-100 rounded" title="View Report"><Eye className="w-4 h-4"/></button>
+                    const parsed = parseCSVTable(content);
+                    
+                    const colCounts: Record<string, number> = {};
+                    const asins = new Set<string>();
+                    
+                    parsed.forEach(r => {
+                      const fType = r["Flag Type"];
+                      if (fType) colCounts[fType] = (colCounts[fType] || 0) + 1;
+                      if (r.ASIN) asins.add(r.ASIN);
+                    });
+                    
+                    setResults({
+                      totalAnalyzed: '—',
+                      totalFlags: parsed.length,
+                      affectedAsinsCount: asins.size,
+                      columnChangeCounts: colCounts,
+                      changeLog: parsed,
+                      isSavedView: true,
+                      reportName: report
+                    });
+                    
+                    setVisibleColumns(new Set(Object.keys(colCounts)));
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+                  }} className="p-1.5 text-emerald-600 hover:bg-emerald-100 rounded" title="View Report Dashboard"><Eye className="w-4 h-4"/></button>
                   <button onClick={async () => {
                     const content = await safeGetFileContent(report, 'reports/');
                     downloadCSV(parseCSVTable(content), report);
