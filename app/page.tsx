@@ -862,7 +862,7 @@ function ImageVault() {
           </div>
         )}
 
-        {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
+        {/* BATCH UPLOAD COMPLETE MODAL */}
         {uploadedBatchLinks && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -910,7 +910,7 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Image Vault</h2>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
@@ -1067,7 +1067,7 @@ function ImageVault() {
         </div>
       )}
 
-      {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
+      {/* BATCH UPLOAD COMPLETE MODAL */}
       {uploadedBatchLinks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -3115,20 +3115,20 @@ function CatalogMonitor() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
-        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 71 catalog data points.</p>
+        <p className="text-slate-500 mt-1">Detect unauthorized changes across all 71 attributes.</p>
       </div>
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Safe State)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Old</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmOld} onChange={e => setCmOld(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Current State)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">New</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmNew} onChange={e => setCmNew(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
