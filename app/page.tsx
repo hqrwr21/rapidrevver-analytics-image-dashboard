@@ -28,13 +28,7 @@ const safeUploadTextToB2 = async (text: string, fileName: string, folder: string
   try {
     const file = new Blob([text], { type: 'text/csv' });
     const url = await getPresignedUploadUrl(fileName, folder, 'text/csv');
-    
-    const res = await fetch(url, {
-      method: 'PUT',
-      body: file,
-      headers: { 'Content-Type': 'text/csv' }
-    });
-    
+    const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': 'text/csv' } });
     if (!res.ok) throw new Error("Upload blocked by cloud storage.");
     return true;
   } catch (error) {
@@ -159,7 +153,7 @@ const unpackRecord = (row: Record<string, string>): Record<string, string> => {
 };
 
 // ==========================================
-// 2. GLOBAL SCHEMAS (CATALOG & ADS)
+// 2. CONSTANTS & SCHEMAS
 // ==========================================
 const CATALOG_HEADERS = [
   "Run", "ASIN", "Brand", "Al's Listing SKU", "RR Listing SKU", "Keystone PN", 
@@ -192,51 +186,59 @@ const ADS_LEADERBOARD_HEADERS = [
   "7 Day Advertised SKU Sales", "7 Day Other SKU Sales"
 ];
 
-// ==========================================
-// 3. SEO MATCHING ENGINE
-// ==========================================
-interface MatchResult {
-  keyword: string; status: string; exact_locations: string[]; exact_loc_str: string;
-  token_coverage_pct: number; missing_tokens: string[]; missing_tokens_str: string;
-}
+const PRODUCT_CATEGORIES = [
+  { id: 'global', label: '🌍 Global Master Sheet', file: 'N/A' },
+  { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
+  { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
+  { id: 'center_caps', label: 'Center Caps', file: 'masterlist_center_caps.csv' },
+  { id: 'grille_inserts', label: 'Grille Inserts', file: 'masterlist_grille_inserts.csv' }
+];
 
-const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, string>): MatchResult => {
-  const cleanKw = String(kwPhrase).toLowerCase().trim();
-  const kwTokens = cleanKw.match(/\b\w+\b/g)?.filter(t => t.length > 1) || [];
-
-  if (kwTokens.length === 0) {
-    return { keyword: kwPhrase, status: "Invalid Keyword", exact_locations: [], exact_loc_str: "None", token_coverage_pct: 0, missing_tokens: [], missing_tokens_str: "None" };
-  }
-
-  const exactLocations: string[] = [];
-  let fieldTextCombined = "";
-  Object.entries(fieldsDict).forEach(([label, text]) => {
-    if (text && typeof text === 'string') {
-      const cleanText = text.toLowerCase();
-      fieldTextCombined += " " + cleanText;
-      if (cleanText.includes(cleanKw)) exactLocations.push(label);
-    }
-  });
-
-  const foundTokens = new Set<string>();
-  const missingTokens: string[] = [];
-  kwTokens.forEach(token => {
-    const regex = new RegExp(`\\b${token}\\b`);
-    if (regex.test(fieldTextCombined)) foundTokens.add(token); else missingTokens.push(token);
-  });
-
-  const coveragePct = Math.round((foundTokens.size / kwTokens.length) * 100 * 10) / 10;
-  let status = exactLocations.length > 0 ? "🟢 Exact Match" : coveragePct === 100 ? "🟡 Broad Match (All Words Present)" : coveragePct > 0 ? `🟠 Partial Match (${foundTokens.size}/${kwTokens.length} Words)` : "🔴 Missing (0% Coverage)";
-
-  return {
-    keyword: kwPhrase, status, exact_locations: exactLocations, exact_loc_str: exactLocations.length > 0 ? exactLocations.join(", ") : "None",
-    token_coverage_pct: coveragePct, missing_tokens: missingTokens,
-    missing_tokens_str: missingTokens.length > 0 ? missingTokens.join(", ") : "None"
-  };
+const CATEGORY_SCHEMAS: Record<string, any[]> = {
+  wheel_skins: [
+    { group: "Shared Data", color: "bg-slate-800", text: "text-white", subgroups: [{ name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part TYpe Jobber", "Status", "Fitment Info", "FTP QTY", "Jobber Price"] }, { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Cost Price", "Cost Price = 8%", "Product Type", "item Type Keyword", "Hollander/Part Code", "Material", "Number of Items", "Color/ Finish", "Size for Bullet", "Installation Type", "Pattern"] }, { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "Material", "Number of Items", "Exterior Finish", "Color", "Size for Attribute", "Size Digit", "Model Brand Part Fits", "OEM Equivalent Part Number", "Retention Attrbute", "Pattern", "Included Components"] }, { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Generic Keywords", "Item Length", "Item Package Length", "Package Length Unit", "Item Package Width", "Package Width Unit", "Item Package Height", "Package Height Unit", "Package Weight"] }, { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Package Weight Unit", "Fitment Type"] }] },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
+    { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
+  ],
+  hubcaps: [
+    { group: "Shared Data", color: "bg-slate-800", text: "text-white", subgroups: [{ name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] }, { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] }, { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["material", "number of items", "exterior finish", "color", "size for attribute", "size digit", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] }, { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] }, { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }] },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
+  ],
+  center_caps: [
+    { group: "Shared Data", color: "bg-slate-800", text: "text-white", subgroups: [{ name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part no", "part type jobber", "status", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] }, { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["cost price", "Product type", "item type keyword", "Hollander/Part Code", "material", "number of items", "color/finish", "size for bullet", "installation type", "pattern"] }, { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["compatible with", "material", "number of items", "exterior finish", "color", "size for attribute", "finish code", "model brand part fits", "OEM Equivalent Part Number", "retention attribute", "pattern", "included components", "generic keywords"] }, { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["item length", "item package length", "package length unit", "item package width", "package width unit", "item package height", "package height unit", "package weight", "package weight unit"] }, { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["fitment type"] }] },
+    { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing SKU", "MPN"] }] },
+    { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+    { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+    { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] }
+  ]
 };
 
+CATEGORY_SCHEMAS['global'] = [
+  { group: "Shared Data", color: "bg-slate-800", text: "text-white", subgroups: [{ name: "General", color: "bg-slate-200", text: "text-slate-800", cols: ["Part No", "Part no", "Part TYpe Jobber", "part type jobber", "Status", "status", "Fitment Info", "fitment info", "FTP QTY", "Jobber Price", "Cost Price"] }, { name: "Keywords Detail Page", color: "bg-slate-300", text: "text-slate-800", cols: ["Product Type", "Product type", "item Type Keyword", "item type keyword", "Hollander/Part Code", "Material", "material", "Number of Items", "number of items", "Color/ Finish", "color/finish", "Size for Bullet", "size for bullet", "Installation Type", "installation type", "Pattern", "pattern"] }, { name: "Keywords for Attribute", color: "bg-slate-200", text: "text-slate-800", cols: ["Compatible With", "compatible with", "Exterior Finish", "exterior finish", "Color", "color", "Size for Attribute", "size for attribute", "Size Digit", "size digit", "finish code", "Model Brand Part Fits", "model brand part fits", "OEM Equivalent Part Number", "Retention Attrbute", "retention attribute", "Included Components", "included components", "Generic Keywords", "generic keywords"] }, { name: "Weight and Dimensions", color: "bg-slate-300", text: "text-slate-800", cols: ["Item Length", "item length", "Item Package Length", "item package length", "Package Length Unit", "package length unit", "Item Package Width", "item package width", "Package Width Unit", "package width unit", "Item Package Height", "item package height", "Package Height Unit", "package height unit", "Package Weight", "package weight", "Package Weight Unit", "package weight unit"] }, { name: "Fitment Info", color: "bg-slate-200", text: "text-slate-800", cols: ["Fitment Type", "fitment type", "fitment for SEO", "make for SEO", "model for SEO", "vehicle category", "number of fitment"] }] },
+  { group: "OxGord", color: "bg-blue-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-blue-100", text: "text-blue-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "Fuel Rider", color: "bg-red-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-red-100", text: "text-red-900", cols: ["ASIN", "Main Listing", "Main Listing SKU", "SKU", "MPN"] }] },
+  { group: "MUA", color: "bg-purple-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-purple-100", text: "text-purple-900", cols: ["ASIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "Walmart", color: "bg-sky-500", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-sky-100", text: "text-sky-900", cols: ["GTIN", "Main Listing", "SKU", "MPN"] }] },
+  { group: "eBay", color: "bg-emerald-600", text: "text-white", subgroups: [{ name: "Identifiers", color: "bg-emerald-100", text: "text-emerald-900", cols: ["SKU", "GTIN"] }] },
+  { group: "Amazon -OxGord", color: "bg-amber-500", text: "text-white", subgroups: [{ name: "Listing Data", color: "bg-amber-100", text: "text-amber-900", cols: ["Listing Notes", "Live Date", "QTY", "Price", "Shipping Tepmlate", "Business Price", "Title Length", "Product Name", "Title", "Description", "Bullet 1", "Bullet 2", "Bullet 3", "Bullet 4", "Bullet 5", "Hero Image", "Image 1", "Image 2", "Image 3", "Image 4", "Image 5"] }] },
+  { group: "Ride And Rover", color: "bg-indigo-600", text: "text-white", subgroups: [{ name: "Financials", color: "bg-indigo-100", text: "text-indigo-900", cols: ["Cost", "Shipping", "Shopify Fee", "Advertising", "Returns Allow", "Margin General P", "Margin Loyalty", "Margin Distributor", "General Price", "Loyalty Price", "Distributor Price"] }] }
+];
+
+
 // ==========================================
-// 4. BASE UI COMPONENTS & CUSTOM HOOKS
+// 3. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
 function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
   return (
@@ -271,14 +273,16 @@ function useB2FilesWithDetails(folder: string, refreshTrigger: number) {
   return files;
 }
 
+
 // ==========================================
-// 5. MODULE: DATA INGESTION
+// 4. MODULE: DATA INGESTION
 // ==========================================
 function DataIngestion() {
   const [catFiles, setCatFiles] = useState<File[]>([]);
   const [isCatUploading, setIsCatUploading] = useState(false);
   const [catParsedData, setCatParsedData] = useState<any[] | null>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
+  const TOP_LEVEL_COLS = ['ASIN', 'Brand', 'title', 'list_price', 'bullet_point_1'];
 
   const [adFiles, setAdFiles] = useState<File[]>([]);
   const [isAdUploading, setIsAdUploading] = useState(false);
@@ -450,7 +454,7 @@ function DataIngestion() {
 }
 
 // ==========================================
-// 6. MODULE: IMAGE VAULT 
+// 5. MODULE: IMAGE VAULT 
 // ==========================================
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
@@ -812,6 +816,53 @@ function ImageVault() {
                 <X className="w-6 h-6" />
               </button>
               <img src={expandedImage} alt="Expanded View" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
+        {uploadedBatchLinks && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
+                <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
+                <p className="text-xs text-slate-500">Links successfully generated for your masterlists:</p>
+                <div className="space-y-3">
+                  {uploadedBatchLinks.map((item, i) => (
+                    <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
+                      <span className="font-bold text-slate-800 block truncate">{item.name}</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div className="flex items-center justify-between bg-white p-2 rounded border">
+                          <span className="font-semibold text-blue-600 truncate text-[10px] pr-2">{item.link1}</span>
+                          <button onClick={() => { navigator.clipboard.writeText(item.link1); setCopiedKey(`${item.name}_1_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-blue-600 font-bold whitespace-nowrap">
+                            {copiedKey === `${item.name}_1_BATCH` ? 'Copied!' : 'Copy'}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between bg-white p-2 rounded border">
+                          <span className="font-semibold text-amber-600 truncate text-[10px] pr-2">{item.link2}</span>
+                          <button onClick={() => { navigator.clipboard.writeText(item.link2); setCopiedKey(`${item.name}_2_BATCH`); setTimeout(() => setCopiedKey(''), 2000); }} className="text-[10px] text-slate-600 hover:text-amber-600 font-bold whitespace-nowrap">
+                            {copiedKey === `${item.name}_2_BATCH` ? 'Copied!' : 'Copy'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+                <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
+                <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
+                  <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Batch:</span>
+                  <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.link1).join('\n')); setCopiedAll('BATCH_1'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_1' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 1s</button>
+                  <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => l.link2).join('\n')); setCopiedAll('BATCH_2'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold border-r border-slate-200 transition-colors ${copiedAll === 'BATCH_2' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Link 2s</button>
+                  <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nL1: ${l.link1}\nL2: ${l.link2}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Both Links</button>
+                </div>
+              </div>
+              </div>
             </div>
           </div>
         )}
@@ -2927,6 +2978,10 @@ function CatalogMonitor() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<any>(null);
 
+  // New interactive column filter states
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(CATALOG_HEADERS));
+  const [showColumnFilter, setShowColumnFilter] = useState(false);
+
   useEffect(() => {
     if (snapshots.length >= 2) {
       if (!cmOld) setCmOld(snapshots[0]);
@@ -2962,18 +3017,14 @@ function CatalogMonitor() {
       totalAnalyzed++;
       let hasChange = false;
 
-      // Dynamically scan ALL headers
       CATALOG_HEADERS.forEach(col => {
-        if (col.toLowerCase() === 'asin' || col.toLowerCase() === 'run') return; // Skip identifiers
+        if (col.toLowerCase() === 'asin' || col.toLowerCase() === 'run') return; 
 
         const oldVal = getField(oldRow, col);
         const newVal = getField(newRow, col);
 
-        // If both exist and don't match, flag it
         if (oldVal !== undefined && newVal !== undefined && oldVal !== newVal) {
           hasChange = true;
-          
-          // Tally the exact column that changed for the Pie Chart
           columnChangeCounts[col] = (columnChangeCounts[col] || 0) + 1;
 
           changeLog.push({ 
@@ -2998,13 +3049,25 @@ function CatalogMonitor() {
     setIsAnalyzing(false);
   };
 
-  // Expanded color palette to handle many distinct column changes
+  // Apply the interactive filter to the change log instantly (saves processing power)
+  const filteredChangeLog = useMemo(() => {
+    if (!results) return [];
+    return results.changeLog.filter((row: any) => visibleColumns.has(row["Flag Type"]));
+  }, [results, visibleColumns]);
+
+  // Re-aggregate the pie chart dynamically based on the filtered change log
+  const filteredPieData = useMemo(() => {
+    if (!results) return [];
+    const tempCounts: Record<string, number> = {};
+    filteredChangeLog.forEach((row: any) => {
+      tempCounts[row["Flag Type"]] = (tempCounts[row["Flag Type"]] || 0) + 1;
+    });
+    return Object.entries(tempCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a: any, b: any) => b.value - a.value);
+  }, [filteredChangeLog]);
+
   const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316', '#0ea5e9', '#6366f1', '#84cc16', '#eab308'];
-  
-  // Transform the column counts into dynamic pie chart data, sorted largest to smallest
-  const pieData = results ? Object.entries(results.columnChangeCounts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a: any, b: any) => b.value - a.value) : [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -3030,9 +3093,11 @@ function CatalogMonitor() {
             </select>
           </div>
         </div>
-        <Button onClick={runAnalysis} disabled={isAnalyzing} className="w-full sm:w-auto">
-          {isAnalyzing ? 'Scanning Catalog...' : 'Run Full Catalog Scan'}
-        </Button>
+        <div className="flex justify-start border-t pt-4 mt-2">
+          <Button onClick={runAnalysis} disabled={isAnalyzing} className="w-full sm:w-auto">
+            {isAnalyzing ? 'Scanning Catalog...' : 'Run Full Catalog Scan'}
+          </Button>
+        </div>
       </Card>
 
       {results && (
@@ -3043,47 +3108,86 @@ function CatalogMonitor() {
               <p className="text-5xl font-black text-blue-600 mt-2">{results.totalAnalyzed}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-red-50/50 border-red-200">
-              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Unauthorized Flags</p>
-              <p className="text-5xl font-black text-red-600 mt-2">{results.totalFlags}</p>
+              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Visible Flags</p>
+              <p className="text-5xl font-black text-red-600 mt-2">{filteredChangeLog.length}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-amber-50/50 border-amber-200">
               <p className="text-sm font-bold text-amber-800 uppercase tracking-wider">Affected Listings</p>
-              <p className="text-5xl font-black text-amber-600 mt-2">{results.affectedAsinsCount}</p>
+              <p className="text-5xl font-black text-amber-600 mt-2">{new Set(filteredChangeLog.map((r: any) => r.ASIN)).size}</p>
             </Card>
           </div>
 
-          {results.totalFlags > 0 ? (
+          {filteredChangeLog.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="p-6 lg:col-span-1 flex flex-col items-center">
                 <h3 className="font-bold text-slate-800 mb-4 w-full border-b pb-2">Flag Distribution</h3>
                 <div className="w-full h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
-                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                      <Pie data={filteredPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                        {filteredPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                       </Pie>
                       <Tooltip />
-                      <Legend verticalAlign="bottom" height={72} className="text-xs" />
+                      <Legend verticalAlign="bottom" height={72} wrapperStyle={{ fontSize: '12px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
               </Card>
 
               <Card className="p-6 lg:col-span-2 flex flex-col">
-                <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-2 gap-4">
                   <h3 className="font-bold text-slate-800">Catalog Change Ledger</h3>
-                  <Button onClick={() => downloadCSV(results.changeLog, `catalog_monitor_flags.csv`)} className="py-1 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export Flags</Button>
+                  
+                  <div className="flex items-center space-x-2 relative">
+                    <Button variant="secondary" onClick={() => setShowColumnFilter(!showColumnFilter)} className="bg-white border text-xs py-1.5 px-3">
+                      <List className="w-3 h-3 mr-2" /> Filter Flags ({visibleColumns.size}/{CATALOG_HEADERS.length})
+                    </Button>
+                    
+                    {showColumnFilter && (
+                      <div className="absolute right-[110px] top-10 bg-white border border-slate-200 shadow-xl rounded-lg p-4 w-72 max-h-96 flex flex-col animate-in slide-in-from-top-2 z-50">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="font-bold text-slate-800">Attributes to Monitor</h4>
+                          <div className="flex space-x-2">
+                            <button onClick={() => setVisibleColumns(new Set(CATALOG_HEADERS))} className="text-xs text-blue-600 hover:underline">All</button>
+                            <button onClick={() => setVisibleColumns(new Set())} className="text-xs text-slate-500 hover:underline">Clear</button>
+                          </div>
+                        </div>
+                        <div className="overflow-y-auto flex-1 space-y-2 pr-2 text-left">
+                          {CATALOG_HEADERS.map(col => (
+                            <label key={col} className="flex items-center space-x-2 text-xs text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={visibleColumns.has(col)} 
+                                onChange={() => {
+                                  const next = new Set(visibleColumns);
+                                  if (next.has(col)) next.delete(col);
+                                  else next.add(col);
+                                  setVisibleColumns(next);
+                                }}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="truncate" title={col}>{col}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <Button onClick={() => setShowColumnFilter(false)} className="mt-3 w-full py-1.5 text-xs">Apply Filters</Button>
+                      </div>
+                    )}
+
+                    <Button onClick={() => downloadCSV(filteredChangeLog, `catalog_monitor_flags.csv`)} className="py-1.5 px-3 text-xs"><Download className="w-3 h-3 mr-1" /> Export</Button>
+                  </div>
                 </div>
+
                 <div className="overflow-x-auto flex-1 max-h-[350px]">
                   <table className="w-full text-xs text-left whitespace-nowrap">
                     <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
                       <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Baseline (Safe)</th><th className="p-2">Target (Current)</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {results.changeLog.map((r: any, i: number) => {
+                      {filteredChangeLog.map((r: any, i: number) => {
                         let rowColor = 'hover:bg-slate-50';
                         if (r["Flag Type"].toLowerCase().includes('price') || r["Flag Type"].toLowerCase().includes('cost')) rowColor = 'bg-amber-50 hover:bg-amber-100 text-amber-900';
-                        if (r["Flag Type"].toLowerCase().includes('buy box')) rowColor = 'bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium';
+                        if (r["Flag Type"].toLowerCase().includes('buy box') || r["Flag Type"].toLowerCase().includes('badge')) rowColor = 'bg-purple-50 hover:bg-purple-100 text-purple-900 font-medium';
                         return (
                           <tr key={i} className={rowColor}>
                             <td className="p-2 font-mono font-bold text-slate-800">{r.ASIN}</td>
@@ -3102,7 +3206,7 @@ function CatalogMonitor() {
             <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
               <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
-              <p className="text-emerald-700">No unauthorized changes were detected between the Baseline and Target snapshots.</p>
+              <p className="text-emerald-700">No unauthorized changes were detected for your selected attributes between the snapshots.</p>
             </Card>
           )}
         </>
