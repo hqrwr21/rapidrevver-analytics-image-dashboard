@@ -199,7 +199,7 @@ const ADS_LEADERBOARD_HEADERS = [
 ];
 
 const PRODUCT_CATEGORIES = [
-  { id: 'global', label: '🌍 Global Master Sheet', file: 'N/A' },
+  { id: 'global', label: 'Global Master Sheet', file: 'N/A' },
   { id: 'wheel_skins', label: 'Wheel Skins', file: 'masterlist_wheel_skins.csv' },
   { id: 'hubcaps', label: 'Hubcaps', file: 'masterlist_hubcaps.csv' },
   { id: 'center_caps', label: 'Center Caps', file: 'masterlist_center_caps.csv' },
@@ -1733,7 +1733,7 @@ function MasterCatalog() {
                     </label>
                   ))
                 ) : (
-                  adSnapshots.length === 0 ? <span className="text-xs text-slate-400 italic">No ad reports available.</span> :
+                  adSnapshots.length === 0 ? <span className="text-xs text-slate-400 italic">No AD reports available.</span> :
                   adSnapshots.map(s => (
                     <label key={s} className="flex items-center space-x-2 text-sm cursor-pointer text-emerald-800">
                       <input type="checkbox" checked={selectedAdFiles.includes(s)} onChange={e => { if (e.target.checked) setSelectedAdFiles(prev => prev.concat([s])); else setSelectedAdFiles(prev => prev.filter(f => f !== s)); }} className="rounded text-emerald-600 focus:ring-emerald-500"/>
@@ -1894,11 +1894,11 @@ function AsinDeepDive() {
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Older)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Past Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={ddOld} onChange={e => setDdOld(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Newer)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Recent Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={ddNew} onChange={e => setDdNew(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
           </div>
         </div>
@@ -2001,11 +2001,11 @@ function GlobalDeltaView() {
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Older)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Past Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md text-sm bg-white" value={deltaOld} onChange={e => setDeltaOld(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Newer)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Recent Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md text-sm bg-white" value={deltaNew} onChange={e => setDeltaNew(e.target.value)}>{snapshots.map(s => <option key={s}>{s}</option>)}</select>
           </div>
         </div>
@@ -3170,14 +3170,14 @@ function CatalogMonitor() {
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Baseline Snapshot (Safe State)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Past Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmOld} onChange={e => setCmOld(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Target Snapshot (Current State)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Recent Data</label>
             <select className="w-full border-slate-300 p-2 border rounded-md bg-white text-sm" value={cmNew} onChange={e => setCmNew(e.target.value)}>
               {snapshots.length === 0 && <option value="">No snapshots found</option>}
               {snapshots.map(s => <option key={s}>{s}</option>)}
@@ -3261,11 +3261,11 @@ function CatalogMonitor() {
               <p className="text-5xl font-black text-blue-600 mt-2">{results.totalAnalyzed}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-red-50/50 border-red-200">
-              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Visible Flags</p>
+              <p className="text-sm font-bold text-red-800 uppercase tracking-wider">Flagged Changes</p>
               <p className="text-5xl font-black text-red-600 mt-2">{filteredChangeLog.length}</p>
             </Card>
             <Card className="p-6 flex flex-col items-center justify-center bg-amber-50/50 border-amber-200">
-              <p className="text-sm font-bold text-amber-800 uppercase tracking-wider">Affected Listings</p>
+              <p className="text-sm font-bold text-amber-800 uppercase tracking-wider">Affected ASINS</p>
               <p className="text-5xl font-black text-amber-600 mt-2">{new Set(filteredChangeLog.map((r: any) => r.ASIN)).size}</p>
             </Card>
           </div>
@@ -3274,7 +3274,7 @@ function CatalogMonitor() {
             <Card className="p-12 text-center text-slate-500 border-dashed bg-emerald-50">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-emerald-500" />
               <h2 className="text-xl font-bold text-emerald-800 mb-2">Catalog is Secure</h2>
-              <p className="text-emerald-700">No unauthorized changes were detected between the Baseline and Target snapshots.</p>
+              <p className="text-emerald-700">No unauthorized changes were detected between the Past and Recent data.</p>
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
