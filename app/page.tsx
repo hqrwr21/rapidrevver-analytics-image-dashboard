@@ -3324,7 +3324,7 @@ function CatalogMonitor() {
                   <div className="overflow-x-auto flex-1 max-h-[350px]">
                     <table className="w-full text-xs text-left whitespace-nowrap">
                       <thead className="bg-slate-50 sticky top-0 shadow-sm text-slate-700">
-                        <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Baseline (Safe)</th><th className="p-2">Target (Current)</th></tr>
+                        <tr><th className="p-2">ASIN</th><th className="p-2">Flagged Column</th><th className="p-2">Past Data</th><th className="p-2">Recent Data</th></tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredChangeLog.map((r: any, i: number) => {
