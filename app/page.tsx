@@ -549,10 +549,10 @@ function ImageVault() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
-  // 🚀 LINK BRANDING SELECTOR STATE
+  // 🚀 LINK BRANDING SELECTOR STATE (Used inside the active album)
   const BRAND_DOMAINS = [
     { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
-    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' } // Adjust region if needed
+    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' }
   ];
   const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
 
@@ -953,26 +953,17 @@ function ImageVault() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 space-x-0 sm:space-x-4 w-full sm:w-auto">
-              <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto">
-                <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Link Branding:</span>
-                <select value={selectedBrand.id} onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold w-full sm:w-auto">
-                  {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-                </select>
-              </div>
-
-              <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 w-full sm:w-auto">
-                <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all w-24 sm:w-32">
-                  <option value="" disabled>Category...</option>
-                  <option value="None">No Category</option>
-                  <option value="FR">FR</option>
-                  <option value="OX">OX</option>
-                  <option value="SOT">SOT</option>
-                  <option value="MUA">MUA</option>
-                </select>
-                <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-36 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
-                <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum || !newAlbumCategory || !newAlbumName.trim()}><Plus className="w-4 h-4 mr-1"/> Create</Button>
-              </div>
+            <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 w-full sm:w-auto">
+              <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all w-24 sm:w-32">
+                <option value="" disabled>Category...</option>
+                <option value="None">No Category</option>
+                <option value="FR">FR</option>
+                <option value="OX">OX</option>
+                <option value="SOT">SOT</option>
+                <option value="MUA">MUA</option>
+              </select>
+              <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-36 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+              <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum || !newAlbumCategory || !newAlbumName.trim()}><Plus className="w-4 h-4 mr-1"/> Create</Button>
             </div>
 
           </div>
@@ -1149,7 +1140,15 @@ function ImageVault() {
           <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); setSelectedImages([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-slate-600" /></button>
           <div><h2 className="text-2xl font-bold text-slate-900">{activeAlbum}</h2><p className="text-slate-500 mt-1">Manage images in this album.</p></div>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
+          
+          <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto">
+            <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Link Branding:</span>
+            <select value={selectedBrand.id} onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold w-full sm:w-auto">
+              {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+            </select>
+          </div>
+
           {currentImages.length > 0 && <Button variant="outline" onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)} disabled={isDownloading} className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}</Button>}
           {activeAlbum !== 'Uncategorized' && <Button variant="danger" onClick={() => handleDeleteAlbum(activeAlbum)} disabled={isDeletingAlbum}><Trash2 className="w-4 h-4 mr-2" /> {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}</Button>}
         </div>
@@ -1218,7 +1217,7 @@ function ImageVault() {
                 return (
                   <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none" /></div>
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" /></div>
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
