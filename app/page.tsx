@@ -549,6 +549,13 @@ function ImageVault() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
+  // 🚀 LINK BRANDING SELECTOR STATE
+  const BRAND_DOMAINS = [
+    { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
+    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' } // Adjust region if needed
+  ];
+  const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
+
   useEffect(() => {
     const handleMouseUp = () => setDragMode(null);
     window.addEventListener('mouseup', handleMouseUp);
@@ -577,23 +584,22 @@ function ImageVault() {
 
   const albums = Object.keys(albumData).sort();
 
-  const getDualLinks = async (imgName: string, targetAlbum: string) => {
+  const getDualLinks = async (imgName: string, targetAlbum: string, brandConfig: typeof BRAND_DOMAINS[0]) => {
     const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-    const baseUrl = await getPublicB2Url(imgName, folderPrefix);
-    const urlObj = new URL(baseUrl);
-    const pathSegments = urlObj.pathname.split('/').filter(Boolean);
-    const bucketName = pathSegments[0] || 'rapid-revver';
-    const objectPath = pathSegments.slice(1).join('/');
-
+    const objectPath = `${folderPrefix}${imgName}`;
+    
+    const bucketName = brandConfig.bucket;
+    const region = brandConfig.region;
+    
     return {
-      link1: `https://${bucketName}.s3.us-west-004.backblazeb2.com/${objectPath}`,
-      link2: `https://s3.us-west-004.backblazeb2.com/${bucketName}/${objectPath}`
+      link1: `https://${bucketName}.s3.${region}.backblazeb2.com/${objectPath}`,
+      link2: `https://s3.${region}.backblazeb2.com/${bucketName}/${objectPath}`
     };
   };
 
   const handleCopyMarketplaceLink = async (imgName: string, targetAlbum: string, mp: '1' | '2' | 'ALL') => {
     try {
-      const { link1, link2 } = await getDualLinks(imgName, targetAlbum);
+      const { link1, link2 } = await getDualLinks(imgName, targetAlbum, selectedBrand);
       let textToCopy = '';
       if (mp === 'ALL') {
         textToCopy = `Link 1:\n${link1}\n\nLink 2:\n${link2}`;
@@ -637,10 +643,12 @@ function ImageVault() {
 
       try {
         const contentType = file.type || 'application/octet-stream';
+        // Always uploads to the main database bucket via presigned URL
         const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
         const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         if (res.ok) {
-          const { link1, link2 } = await getDualLinks(file.name, activeAlbum);
+          // Generates the links using the SELECTED brand bucket
+          const { link1, link2 } = await getDualLinks(file.name, activeAlbum, selectedBrand);
           successfulUploads.push({ name: file.name, link1, link2 });
         }
       } catch (err) { 
@@ -669,7 +677,7 @@ function ImageVault() {
     try {
       const imagesToCopy = albumData[targetAlbum] || [];
       const urlsToCopy = await Promise.all(imagesToCopy.map(async (img) => {
-        const { link1, link2 } = await getDualLinks(img.name, targetAlbum);
+        const { link1, link2 } = await getDualLinks(img.name, targetAlbum, selectedBrand);
         if (type === 'ALL') return `${img.name}:\nL1: ${link1}\nL2: ${link2}\n`;
         return type === '1' ? link1 : link2;
       }));
@@ -884,7 +892,7 @@ function ImageVault() {
                 <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-                <p className="text-xs text-slate-500">Links successfully generated for your masterlists:</p>
+                <p className="text-xs text-slate-500">Links successfully generated with <strong className="text-blue-600">{selectedBrand.label}</strong> branding:</p>
                 <div className="space-y-3">
                   {uploadedBatchLinks.map((item, i) => (
                     <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
@@ -945,17 +953,26 @@ function ImageVault() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 w-full sm:w-auto bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-              <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all w-32">
-                <option value="" disabled>Category...</option>
-                <option value="None">No Category</option>
-                <option value="FR">FR</option>
-                <option value="OX">OX</option>
-                <option value="SOT">SOT</option>
-                <option value="MUA">MUA</option>
-              </select>
-              <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-48 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
-              <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum || !newAlbumCategory || !newAlbumName.trim()}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 space-x-0 sm:space-x-4 w-full sm:w-auto">
+              <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto">
+                <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Link Branding:</span>
+                <select value={selectedBrand.id} onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold w-full sm:w-auto">
+                  {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 w-full sm:w-auto">
+                <select value={newAlbumCategory} onChange={e => setNewAlbumCategory(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all w-24 sm:w-32">
+                  <option value="" disabled>Category...</option>
+                  <option value="None">No Category</option>
+                  <option value="FR">FR</option>
+                  <option value="OX">OX</option>
+                  <option value="SOT">SOT</option>
+                  <option value="MUA">MUA</option>
+                </select>
+                <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-36 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                <Button onClick={handleCreateAlbum} disabled={isDeletingAlbum || !newAlbumCategory || !newAlbumName.trim()}><Plus className="w-4 h-4 mr-1"/> Create</Button>
+              </div>
             </div>
 
           </div>
@@ -1045,7 +1062,7 @@ function ImageVault() {
                   );
                 })}
               </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images contain "{albumSearch}".</div>}
+            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>}
           </Card>
         )}
       </div>
@@ -1089,7 +1106,7 @@ function ImageVault() {
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-              <p className="text-xs text-slate-500">Links successfully generated for your masterlists:</p>
+              <p className="text-xs text-slate-500">Links successfully generated with <strong className="text-blue-600">{selectedBrand.label}</strong> branding:</p>
               <div className="space-y-3">
                 {uploadedBatchLinks.map((item, i) => (
                   <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
@@ -1201,7 +1218,7 @@ function ImageVault() {
                 return (
                   <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" /></div>
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none" /></div>
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
@@ -1211,11 +1228,21 @@ function ImageVault() {
                         <div className="flex items-center space-x-1"><input autoFocus type="text" className="w-full text-xs border p-1 rounded focus:ring-1 focus:ring-blue-500 outline-none" value={editImageText} onChange={e => setEditImageText(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') handleRenameImage(imgName, activeAlbum as string); if(e.key === 'Escape') setEditingImage(null); }} /><button onClick={() => handleRenameImage(imgName, activeAlbum as string)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Check className="w-3 h-3"/></button><button onClick={() => setEditingImage(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X className="w-3 h-3"/></button></div>
                       ) : (
                         <div className="flex items-center justify-between gap-2 group/title cursor-pointer" onClick={() => { setEditingImage(uniqueImgKey); setEditImageText(imgName.includes('.') ? imgName.substring(0, imgName.lastIndexOf('.')) : imgName); }}>
-                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">{activeAlbum}</span>
-                          <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
+                          <p className="text-xs font-medium text-slate-800 truncate" title={imgName}>{imgName}</p>
+                          <Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
                       )}
-                      <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum as string)}><Trash2 className="w-3 h-3" /></Button></div>
+
+                      <div className="space-y-1 mt-auto">
+                        <div className="grid grid-cols-2 gap-1">
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
+                        </div>
+                        <div className="flex space-x-1">
+                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
+                          <button onClick={() => handleDeleteImage(imgName, activeAlbum as string)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
