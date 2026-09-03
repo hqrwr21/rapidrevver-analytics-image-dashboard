@@ -549,10 +549,13 @@ function ImageVault() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
-  // 🚀 LINK BRANDING SELECTOR STATE (Used inside the active album)
+  // 🚀 LINK BRANDING SELECTOR STATE
+  // Make sure the bucket names here EXACTLY match what you name them in Backblaze!
   const BRAND_DOMAINS = [
     { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
-    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' }
+    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
+    { id: 'fuel-rider', label: 'Fuel Rider', bucket: 'fuelrider-media', region: 'us-west-004' },
+    { id: 'motorup', label: 'MotorUp America', bucket: 'motorup-media', region: 'us-west-004' }
   ];
   const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
 
@@ -585,8 +588,14 @@ function ImageVault() {
   const albums = Object.keys(albumData).sort();
 
   const getDualLinks = async (imgName: string, targetAlbum: string, brandConfig: typeof BRAND_DOMAINS[0]) => {
-    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
-    const objectPath = `${folderPrefix}${imgName}`;
+    // 🚀 AMAZON FIX: We MUST URL-encode the album and image name. 
+    // Amazon's scraper crashes (Error 20000) if it sees unencoded spaces or brackets like "[OX]"
+    const safeAlbum = targetAlbum === 'Uncategorized' ? '' : encodeURIComponent(targetAlbum) + '/';
+    
+    // Some image names might have spaces or symbols, so we encode them too
+    const safeImgName = encodeURIComponent(imgName);
+    
+    const objectPath = `images/${safeAlbum}${safeImgName}`;
     
     const bucketName = brandConfig.bucket;
     const region = brandConfig.region;
@@ -944,7 +953,6 @@ function ImageVault() {
                 <option value="All">All Categories</option>
                 <option value="FR">FR</option>
                 <option value="OX">OX</option>
-                <option value="SOT">SOT</option>
                 <option value="MUA">MUA</option>
               </select>
               <div className="relative w-full sm:w-64">
@@ -959,7 +967,6 @@ function ImageVault() {
                 <option value="None">No Category</option>
                 <option value="FR">FR</option>
                 <option value="OX">OX</option>
-                <option value="SOT">SOT</option>
                 <option value="MUA">MUA</option>
               </select>
               <input type="text" placeholder="New Album Name" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} className="border border-slate-300 p-1.5 rounded-md text-sm bg-white flex-1 sm:w-36 outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
@@ -1217,7 +1224,7 @@ function ImageVault() {
                 return (
                   <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
-                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 pointer-events-none" /></div>
+                      <div className="absolute top-2 left-2 z-20 bg-white/90 rounded backdrop-blur-sm p-1 shadow-sm"><input type="checkbox" checked={isSelected} readOnly className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none" /></div>
                       <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={(e) => { e.stopPropagation(); setExpandedImage(imgUrl); }} className="p-1.5 bg-white/90 backdrop-blur-sm text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded shadow-sm" title="Expand Image"><ZoomIn className="w-4 h-4" /></button></div>
                       <img src={imgUrl} alt={imgName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300 pointer-events-none" loading="lazy" />
                     </div>
