@@ -549,8 +549,10 @@ function ImageVault() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
+  // 🚀 NEW STATE: Controls the Copy Link Prompt Modal
+  const [linkPrompt, setLinkPrompt] = useState<{name: string, album: string} | null>(null);
+
   // 🚀 LINK BRANDING SELECTOR STATE
-  // Make sure the bucket names here EXACTLY match what you name them in Backblaze!
   const BRAND_DOMAINS = [
     { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
     { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
@@ -588,15 +590,10 @@ function ImageVault() {
   const albums = Object.keys(albumData).sort();
 
   const getDualLinks = async (imgName: string, targetAlbum: string, brandConfig: typeof BRAND_DOMAINS[0]) => {
-    // 🚀 AMAZON FIX: We MUST URL-encode the album and image name. 
-    // Amazon's scraper crashes (Error 20000) if it sees unencoded spaces or brackets like "[OX]"
     const safeAlbum = targetAlbum === 'Uncategorized' ? '' : encodeURIComponent(targetAlbum) + '/';
-    
-    // Some image names might have spaces or symbols, so we encode them too
     const safeImgName = encodeURIComponent(imgName);
     
     const objectPath = `images/${safeAlbum}${safeImgName}`;
-    
     const bucketName = brandConfig.bucket;
     const region = brandConfig.region;
     
@@ -636,10 +633,13 @@ function ImageVault() {
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
     const successfulUploads: {name: string, link1: string, link2: string}[] = [];
     const totalFiles = pendingFiles.length;
+    const isMUA = activeAlbum.startsWith('MUA_'); 
 
     for (let i = 0; i < totalFiles; i++) {
       const file = pendingFiles[i];
-      setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${file.name}`);
+      const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+      
+      setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${safeFileName}`);
       setUploadProgress((i / totalFiles) * 100);
 
       const interval = setInterval(() => {
@@ -652,16 +652,22 @@ function ImageVault() {
 
       try {
         const contentType = file.type || 'application/octet-stream';
-        // Always uploads to the main database bucket via presigned URL
-        const url = await getPresignedUploadUrl(file.name, folderPrefix, contentType);
-        const res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
-        if (res.ok) {
-          // Generates the links using the SELECTED brand bucket
-          const { link1, link2 } = await getDualLinks(file.name, activeAlbum, selectedBrand);
-          successfulUploads.push({ name: file.name, link1, link2 });
+        
+        const urlMain = await getPresignedUploadUrl(safeFileName, folderPrefix, contentType);
+        const resMain = await fetch(urlMain, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
+        
+        if (resMain.ok) {
+          if (isMUA) {
+            setUploadStatusText(`Syncing ${safeFileName} to MotorUp Media...`);
+            const urlMUA = await getPresignedUploadUrl(safeFileName, folderPrefix, contentType, 'motorup-media');
+            await fetch(urlMUA, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
+          }
+
+          const { link1, link2 } = await getDualLinks(safeFileName, activeAlbum, selectedBrand);
+          successfulUploads.push({ name: safeFileName, link1, link2 });
         }
       } catch (err) { 
-        console.error("Batch upload error", file.name, err); 
+        console.error("Batch upload error", safeFileName, err); 
       }
       clearInterval(interval);
     }
@@ -700,7 +706,7 @@ function ImageVault() {
   const filteredAlbums = useMemo(() => {
     let filtered = albums;
     if (albumCategoryFilter !== 'All') {
-      filtered = filtered.filter(a => a.startsWith(`[${albumCategoryFilter}]`));
+      filtered = filtered.filter(a => a.startsWith(`${albumCategoryFilter}_`));
     }
     if (albumSearch.trim()) {
       const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
@@ -718,7 +724,7 @@ function ImageVault() {
     const results: { album: string, name: string, date: number }[] = [];
     
     Object.entries(albumData).forEach(([album, imgs]) => {
-      if (albumCategoryFilter !== 'All' && !album.startsWith(`[${albumCategoryFilter}]`)) {
+      if (albumCategoryFilter !== 'All' && !album.startsWith(`${albumCategoryFilter}_`)) {
         return;
       }
       for (const img of imgs) {
@@ -739,8 +745,10 @@ function ImageVault() {
 
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim() || !newAlbumCategory) return;
-    const cleanName = newAlbumName.trim().replace(/[^a-zA-Z0-9-_ \s]/g, '_'); 
-    const finalName = newAlbumCategory === 'None' ? cleanName : `[${newAlbumCategory}] ${cleanName}`;
+    
+    const cleanName = newAlbumName.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, ''); 
+    const finalName = newAlbumCategory === 'None' ? cleanName : `${newAlbumCategory}_${cleanName}`;
+    
     if (!localAlbums.includes(finalName) && !albums.includes(finalName)) {
       setLocalAlbums([...localAlbums, finalName]);
     }
@@ -753,7 +761,9 @@ function ImageVault() {
       setEditingAlbum(null);
       return;
     }
-    const newName = editAlbumText.trim().replace(/[^a-zA-Z0-9-_ \s\[\]]/g, '_');
+    
+    const newName = editAlbumText.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
@@ -798,7 +808,9 @@ function ImageVault() {
       return;
     }
     const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
-    let newName = editImageText.trim().replace(/[^a-zA-Z0-9-_ \.\(\)]/g, '_');
+    
+    let newName = editImageText.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+    
     if (oldExt && !newName.endsWith(`.${oldExt}`)) {
       newName += `.${oldExt}`;
     }
@@ -881,6 +893,44 @@ function ImageVault() {
   if (!activeAlbum) {
     return (
       <div className="space-y-6 animate-in fade-in duration-500 relative">
+        
+        {/* 🚀 COPY LINK PROMPT MODAL */}
+        {linkPrompt && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setLinkPrompt(null)}>
+            <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200" onClick={e => e.stopPropagation()}>
+              <h3 className="font-bold text-slate-800 text-lg mb-1">Copy Image Link</h3>
+              <p className="text-xs text-slate-500 mb-5 truncate font-medium" title={linkPrompt.name}>File: {linkPrompt.name}</p>
+              
+              <div className="space-y-2.5">
+                <button 
+                  onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, '1'); setLinkPrompt(null); }}
+                  className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 transition-colors flex justify-between items-center"
+                >
+                  <span>Copy Link 1</span>
+                  <Link className="w-4 h-4 opacity-70" />
+                </button>
+                <button 
+                  onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, '2'); setLinkPrompt(null); }}
+                  className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-lg border border-amber-200 transition-colors flex justify-between items-center"
+                >
+                  <span>Copy Link 2</span>
+                  <Link className="w-4 h-4 opacity-70" />
+                </button>
+                <div className="pt-2 border-t border-slate-100">
+                  <button 
+                    onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, 'ALL'); setLinkPrompt(null); }}
+                    className="w-full py-2 px-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold rounded-lg border border-slate-200 transition-colors flex justify-between items-center"
+                  >
+                    <span>Copy Both Links</span>
+                    <Link className="w-4 h-4 opacity-50" />
+                  </button>
+                </div>
+              </div>
+              <button onClick={() => setLinkPrompt(null)} className="w-full mt-4 py-2 text-sm text-slate-400 hover:text-slate-600 font-medium transition-colors">Cancel</button>
+            </div>
+          </div>
+        )}
+
         {expandedImage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
             <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -892,7 +942,6 @@ function ImageVault() {
           </div>
         )}
 
-        {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
         {uploadedBatchLinks && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
@@ -1054,7 +1103,12 @@ function ImageVault() {
                             <div className="flex items-center justify-between gap-2"><p className="text-xs font-medium text-slate-800 truncate" title={imgObj.name}>{imgObj.name}</p><Edit3 className="w-3 h-3 text-slate-300 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" /></div>
                           </div>
                         )}
-                        <div className="flex space-x-2 w-full"><Button variant="secondary" className="flex-1 text-xs py-1.5 px-2 flex items-center justify-center" onClick={() => handleCopyMarketplaceLink(imgObj.name, imgObj.album, 'ALL')}><Link className="w-3 h-3 mr-1.5" /> Copy</Button><Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button></div>
+                        <div className="flex space-x-2 w-full mt-auto pt-2">
+                          <Button variant="secondary" className={`flex-1 text-xs py-1.5 px-2 flex items-center justify-center transition-colors ${copiedKey.startsWith(imgObj.name) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}`} onClick={() => setLinkPrompt({name: imgObj.name, album: imgObj.album})}>
+                            <Link className="w-3 h-3 mr-1.5" /> {copiedKey.startsWith(imgObj.name) ? 'Copied!' : 'Copy Link'}
+                          </Button>
+                          <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgObj.name, imgObj.album)}><Trash2 className="w-3 h-3" /></Button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1086,6 +1140,44 @@ function ImageVault() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
+      
+      {/* 🚀 COPY LINK PROMPT MODAL */}
+      {linkPrompt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setLinkPrompt(null)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-slate-800 text-lg mb-1">Copy Image Link</h3>
+            <p className="text-xs text-slate-500 mb-5 truncate font-medium" title={linkPrompt.name}>File: {linkPrompt.name}</p>
+            
+            <div className="space-y-2.5">
+              <button 
+                onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, '1'); setLinkPrompt(null); }}
+                className="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-200 transition-colors flex justify-between items-center"
+              >
+                <span>Copy Link 1</span>
+                <Link className="w-4 h-4 opacity-70" />
+              </button>
+              <button 
+                onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, '2'); setLinkPrompt(null); }}
+                className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-lg border border-amber-200 transition-colors flex justify-between items-center"
+              >
+                <span>Copy Link 2</span>
+                <Link className="w-4 h-4 opacity-70" />
+              </button>
+              <div className="pt-2 border-t border-slate-100">
+                <button 
+                  onClick={() => { handleCopyMarketplaceLink(linkPrompt.name, linkPrompt.album, 'ALL'); setLinkPrompt(null); }}
+                  className="w-full py-2 px-4 bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold rounded-lg border border-slate-200 transition-colors flex justify-between items-center"
+                >
+                  <span>Copy Both Links</span>
+                  <Link className="w-4 h-4 opacity-50" />
+                </button>
+              </div>
+            </div>
+            <button onClick={() => setLinkPrompt(null)} className="w-full mt-4 py-2 text-sm text-slate-400 hover:text-slate-600 font-medium transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
       {expandedImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
           <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -1239,15 +1331,11 @@ function ImageVault() {
                         </div>
                       )}
 
-                      <div className="space-y-1 mt-auto">
-                        <div className="grid grid-cols-2 gap-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, '1')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_1` ? 'bg-emerald-500 text-white' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>Link 1</button>
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, '2')} className={`py-1 text-[10px] font-bold rounded border transition-colors ${copiedKey === `${imgName}_2` ? 'bg-emerald-500 text-white' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>Link 2</button>
-                        </div>
-                        <div className="flex space-x-1">
-                          <button onClick={() => handleCopyMarketplaceLink(imgName, activeAlbum as string, 'ALL')} className="flex-1 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors">{copiedKey === `${imgObj.name}_ALL` ? 'Copied Both!' : 'Copy Both Links'}</button>
-                          <button onClick={() => handleDeleteImage(imgName, activeAlbum as string)} className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 transition-colors"><Trash2 className="w-3 h-3" /></button>
-                        </div>
+                      <div className="flex space-x-2 w-full mt-auto pt-2">
+                        <Button variant="secondary" className={`flex-1 text-xs py-1.5 px-2 flex items-center justify-center transition-colors ${copiedKey.startsWith(imgName) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ''}`} onClick={() => setLinkPrompt({name: imgName, album: activeAlbum as string})}>
+                          <Link className="w-3 h-3 mr-1.5" /> {copiedKey.startsWith(imgName) ? 'Copied!' : 'Copy Link'}
+                        </Button>
+                        <Button variant="danger" className="text-xs py-1.5 px-2.5" onClick={() => handleDeleteImage(imgName, activeAlbum as string)}><Trash2 className="w-3 h-3" /></Button>
                       </div>
                     </div>
                   </div>
