@@ -195,10 +195,22 @@ export async function getMarketplaceImageUrls(fileName: string, folder: string) 
   };
 }
 
-export async function getPresignedUploadUrl(fileName: string, folder: string, contentType: string) {
-  const { client, bucket } = getS3Target(folder);
-  const command = new PutObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}`, ContentType: contentType });
-  return getSignedUrl(client, command, { expiresIn: 900 });
+export async function getPresignedUploadUrl(
+  fileName: string, 
+  folderPrefix: string, 
+  contentType: string, 
+  targetBucket?: string // 👈 This 4th argument fixes the TypeScript error!
+) {
+  // If targetBucket is provided, use it. Otherwise, fall back to the default bucket in your .env
+  const bucketName = targetBucket || process.env.B2_IMAGE_BUCKET;
+
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: `${folderPrefix}${fileName}`,
+    ContentType: contentType,
+  });
+
+  return getSignedUrl(s3, command, { expiresIn: 3600 });
 }
 
 export async function listFilesWithDetails(folder: string): Promise<{name: string, date: number}[]> {
