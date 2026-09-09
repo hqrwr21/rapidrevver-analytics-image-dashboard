@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
   Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check,
-  List, ShoppingCart, Store, ShoppingBag, Eye
+  List, ShoppingCart, Store, ShoppingBag, Eye, Copy
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -1350,7 +1350,211 @@ function ImageVault() {
 }
 
 // ==========================================
-// 7. MODULE: MASTERLIST WORKSPACE
+// 7. MODULE: IMAGE LINKS DIRECTORY
+// ==========================================
+function ImageLinksDirectory() {
+  const imagesWithDetails = useB2FilesWithDetails('images/', 0);
+  const [copiedKey, setCopiedKey] = useState('');
+  const [expandedAlbums, setExpandedAlbums] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // 🚀 BRAND SELECTOR FOR TABLES
+  const BRAND_DOMAINS = [
+    { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
+    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
+    { id: 'fuel-rider', label: 'Fuel Rider', bucket: 'fuelrider-media', region: 'us-west-004' },
+    { id: 'motorup', label: 'MotorUp America', bucket: 'motorup-media', region: 'us-west-004' }
+  ];
+  const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
+
+  // Group images by folder
+  const albumData = useMemo(() => {
+    const data: Record<string, string[]> = {};
+    imagesWithDetails.forEach(file => {
+      const parts = file.name.split('/');
+      const album = parts.length > 1 ? parts[0] : 'Uncategorized';
+      const fileName = parts.length > 1 ? parts.slice(1).join('/') : file.name;
+      if (!data[album]) data[album] = [];
+      if (fileName) data[album].push(fileName);
+    });
+    return data;
+  }, [imagesWithDetails]);
+
+  // Filter albums and images based on search
+  const filteredAlbums = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    const result: Record<string, string[]> = {};
+    
+    Object.keys(albumData).forEach(album => {
+      const matchingImages = albumData[album].filter(img => 
+        img.toLowerCase().includes(query) || album.toLowerCase().includes(query)
+      );
+      if (matchingImages.length > 0) {
+        result[album] = matchingImages;
+      }
+    });
+    return result;
+  }, [albumData, searchQuery]);
+
+  const toggleAlbum = (album: string) => {
+    setExpandedAlbums(prev => 
+      prev.includes(album) ? prev.filter(a => a !== album) : [...prev, album]
+    );
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(''), 2000);
+  };
+
+  const generateLinks = (imgName: string, albumName: string) => {
+    const safeAlbum = albumName === 'Uncategorized' ? '' : encodeURIComponent(albumName) + '/';
+    const safeImgName = encodeURIComponent(imgName);
+    const objectPath = `images/${safeAlbum}${safeImgName}`;
+    
+    return {
+      link1: `https://${selectedBrand.bucket}.s3.${selectedBrand.region}.backblazeb2.com/${objectPath}`,
+      link2: `https://s3.${selectedBrand.region}.backblazeb2.com/${selectedBrand.bucket}/${objectPath}`
+    };
+  };
+
+  return (
+    <div className="space-y-6 mt-16 pt-10 border-t-2 border-slate-200 animate-in fade-in duration-500">
+      
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">🔗 Master Link Directory</h2>
+          <p className="text-slate-500 mt-1">Export your generated links in bulk, organized by folder.</p>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search images or albums..." 
+              value={searchQuery} 
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                // Auto-expand all if searching, collapse if cleared
+                if (e.target.value.length > 0) {
+                  setExpandedAlbums(Object.keys(albumData));
+                } else {
+                  setExpandedAlbums([]);
+                }
+              }} 
+              className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+            />
+          </div>
+
+          <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto shrink-0">
+            <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Generate For:</span>
+            <select 
+              value={selectedBrand.id} 
+              onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} 
+              className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold"
+            >
+              {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Accordion Tables */}
+      <div className="space-y-4">
+        {Object.keys(filteredAlbums).sort().map(album => {
+          const isExpanded = expandedAlbums.includes(album);
+          const images = filteredAlbums[album].sort((a, b) => a.localeCompare(b));
+
+          return (
+            <Card key={album} className="overflow-hidden">
+              <button 
+                onClick={() => toggleAlbum(album)}
+                className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-100"
+              >
+                <div className="flex items-center space-x-3">
+                  <Folder className="w-5 h-5 text-blue-500" />
+                  <h3 className="font-bold text-slate-800">{album}</h3>
+                  <span className="bg-slate-200 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {images.length}
+                  </span>
+                </div>
+                {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+              </button>
+
+              {isExpanded && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-white text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                        <th className="p-3 font-semibold w-1/4">Image Title</th>
+                        <th className="p-3 font-semibold w-1/3">Link 1 (Bucket Domain)</th>
+                        <th className="p-3 font-semibold w-1/3">Link 2 (S3 Regional Domain)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {images.map(img => {
+                        const { link1, link2 } = generateLinks(img, album);
+                        const uniqueKey = `${album}/${img}`;
+                        return (
+                          <tr key={uniqueKey} className="hover:bg-slate-50 transition-colors group">
+                            <td className="p-3 font-medium text-slate-800 break-words">{img}</td>
+                            
+                            {/* LINK 1 COLUMN */}
+                            <td className="p-3 align-top">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 overflow-hidden">
+                                  <p className="truncate text-xs text-blue-600 cursor-pointer hover:underline" title={link1} onClick={() => window.open(link1, '_blank')}>{link1}</p>
+                                </div>
+                                <button 
+                                  onClick={() => copyToClipboard(link1, `${uniqueKey}_1`)}
+                                  className={`p-1.5 rounded text-xs font-bold transition-colors ${copiedKey === `${uniqueKey}_1` ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500 hover:bg-blue-100 hover:text-blue-700 opacity-0 group-hover:opacity-100'}`}
+                                >
+                                  {copiedKey === `${uniqueKey}_1` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* LINK 2 COLUMN */}
+                            <td className="p-3 align-top">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 overflow-hidden">
+                                  <p className="truncate text-xs text-amber-600 cursor-pointer hover:underline" title={link2} onClick={() => window.open(link2, '_blank')}>{link2}</p>
+                                </div>
+                                <button 
+                                  onClick={() => copyToClipboard(link2, `${uniqueKey}_2`)}
+                                  className={`p-1.5 rounded text-xs font-bold transition-colors ${copiedKey === `${uniqueKey}_2` ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700 opacity-0 group-hover:opacity-100'}`}
+                                >
+                                  {copiedKey === `${uniqueKey}_2` ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            </td>
+                            
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          );
+        })}
+        
+        {Object.keys(filteredAlbums).length === 0 && (
+          <div className="text-center p-12 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500">
+            No images or albums match your search.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 8. MODULE: MASTERLIST WORKSPACE
 // ==========================================
 function MasterlistWorkspace() {
   const [activeCategory, setActiveCategory] = useState(PRODUCT_CATEGORIES[0].id);
@@ -1739,7 +1943,7 @@ function MasterlistWorkspace() {
 }
 
 // ==========================================
-// 8. MODULE: MASTER CATALOG
+// 9. MODULE: MASTER CATALOG
 // ==========================================
 function MasterCatalog() {
   const [activeTab, setActiveTab] = useState('viewer');
@@ -1965,7 +2169,7 @@ function MasterCatalog() {
 }
 
 // ==========================================
-// 9. MODULE: ASIN DEEP DIVE
+// 10. MODULE: ASIN DEEP DIVE
 // ==========================================
 function AsinDeepDive() {
   const [refreshTrigger] = useState(0);
@@ -2054,7 +2258,7 @@ function AsinDeepDive() {
 }
 
 // ==========================================
-// 10. MODULE: GLOBAL DELTA VIEW
+// 11. MODULE: GLOBAL DELTA VIEW
 // ==========================================
 function GlobalDeltaView() {
   const [refreshTrigger] = useState(0);
@@ -2186,7 +2390,7 @@ function GlobalDeltaView() {
 }
 
 // ==========================================
-// 11. MODULE: ADS ANALYSIS
+// 12. MODULE: ADS ANALYSIS
 // ==========================================
 const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
   return data.filter(row => {
@@ -2834,7 +3038,7 @@ function AdsAnalysis() {
 }
 
 // ==========================================
-// 12. MODULE: SEO INTELLIGENCE
+// 13. MODULE: SEO INTELLIGENCE
 // ==========================================
 function SeoIntelligence() {
   const [activeTab, setActiveTab] = useState('audit');
@@ -3160,7 +3364,7 @@ function SeoIntelligence() {
 }
 
 // ==========================================
-// 13. MODULE: CATALOG MONITOR
+// 14. MODULE: CATALOG MONITOR
 // ==========================================
 function CatalogMonitor() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -3464,7 +3668,7 @@ function CatalogMonitor() {
                       </tbody>
                     </table>
                   </div>
-                ) : (
+                  ) : (
                   <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-lg">
                     <CheckCircle2 className="w-8 h-8 text-slate-300 mb-2" />
                     <p className="text-sm text-slate-500 font-medium">All clear here!</p>
@@ -3535,7 +3739,7 @@ function CatalogMonitor() {
 }
 
 // ==========================================
-// 14. MAIN APPLICATION WRAPPER
+// 15. MAIN APPLICATION WRAPPER
 // ==========================================
 export default function Page() {
   const [activeModule, setActiveModule] = useState('ingestion');
@@ -3634,7 +3838,15 @@ export default function Page() {
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-[1400px] mx-auto">
             {activeModule === 'ingestion' && <DataIngestion />}
-            {activeModule === 'images' && <ImageVault />}
+            
+            {/* 🚀 Updated Images section to include both components! */}
+            {activeModule === 'images' && (
+              <>
+                <ImageVault />
+                <ImageLinksDirectory />
+              </>
+            )}
+
             {activeModule === 'masterlist' && <MasterlistWorkspace />}
             {activeModule === 'catalog' && <MasterCatalog />}
             {activeModule === 'monitor' && <CatalogMonitor />}
