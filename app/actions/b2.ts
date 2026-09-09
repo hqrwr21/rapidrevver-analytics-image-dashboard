@@ -199,9 +199,8 @@ export async function getPresignedUploadUrl(
   fileName: string, 
   folderPrefix: string, 
   contentType: string, 
-  targetBucket?: string // 👈 This 4th argument fixes the TypeScript error!
+  targetBucket?: string
 ) {
-  // If targetBucket is provided, use it. Otherwise, fall back to the default bucket in your .env
   const bucketName = targetBucket || process.env.B2_IMAGE_BUCKET;
 
   const command = new PutObjectCommand({
@@ -210,7 +209,8 @@ export async function getPresignedUploadUrl(
     ContentType: contentType,
   });
 
-  return getSignedUrl(s3, command, { expiresIn: 3600 });
+  // 🚀 FIXED: Changed 's3' to 's3Images' to match your connection client
+  return getSignedUrl(s3Images, command, { expiresIn: 3600 });
 }
 
 export async function listFilesWithDetails(folder: string): Promise<{name: string, date: number}[]> {
