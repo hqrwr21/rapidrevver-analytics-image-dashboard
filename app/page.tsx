@@ -549,10 +549,8 @@ function ImageVault() {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadedBatchLinks, setUploadedBatchLinks] = useState<{name: string, link1: string, link2: string}[] | null>(null);
 
-  // 🚀 NEW STATE: Controls the Copy Link Prompt Modal
   const [linkPrompt, setLinkPrompt] = useState<{name: string, album: string} | null>(null);
 
-  // 🚀 LINK BRANDING SELECTOR STATE
   const BRAND_DOMAINS = [
     { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
     { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
@@ -633,11 +631,11 @@ function ImageVault() {
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
     const successfulUploads: {name: string, link1: string, link2: string}[] = [];
     const totalFiles = pendingFiles.length;
-    const isMUA = activeAlbum.startsWith('MUA_'); 
+    const isMUA = activeAlbum.includes('[MUA]'); 
 
     for (let i = 0; i < totalFiles; i++) {
       const file = pendingFiles[i];
-      const safeFileName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+      const safeFileName = file.name; // Removed underscore sanitization
       
       setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${safeFileName}`);
       setUploadProgress((i / totalFiles) * 100);
@@ -706,7 +704,7 @@ function ImageVault() {
   const filteredAlbums = useMemo(() => {
     let filtered = albums;
     if (albumCategoryFilter !== 'All') {
-      filtered = filtered.filter(a => a.startsWith(`${albumCategoryFilter}_`));
+      filtered = filtered.filter(a => a.includes(`[${albumCategoryFilter}]`));
     }
     if (albumSearch.trim()) {
       const terms = albumSearch.toLowerCase().split(/\s+/).filter(Boolean);
@@ -724,7 +722,7 @@ function ImageVault() {
     const results: { album: string, name: string, date: number }[] = [];
     
     Object.entries(albumData).forEach(([album, imgs]) => {
-      if (albumCategoryFilter !== 'All' && !album.startsWith(`${albumCategoryFilter}_`)) {
+      if (albumCategoryFilter !== 'All' && !album.includes(`[${albumCategoryFilter}]`)) {
         return;
       }
       for (const img of imgs) {
@@ -746,8 +744,9 @@ function ImageVault() {
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim() || !newAlbumCategory) return;
     
-    const cleanName = newAlbumName.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, ''); 
-    const finalName = newAlbumCategory === 'None' ? cleanName : `${newAlbumCategory}_${cleanName}`;
+    // Spaces and brackets are now allowed perfectly
+    const cleanName = newAlbumName.trim(); 
+    const finalName = newAlbumCategory === 'None' ? cleanName : `[${newAlbumCategory}] ${cleanName}`;
     
     if (!localAlbums.includes(finalName) && !albums.includes(finalName)) {
       setLocalAlbums([...localAlbums, finalName]);
@@ -762,7 +761,7 @@ function ImageVault() {
       return;
     }
     
-    const newName = editAlbumText.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    const newName = editAlbumText.trim();
     
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
@@ -809,7 +808,7 @@ function ImageVault() {
     }
     const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
     
-    let newName = editImageText.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '');
+    let newName = editImageText.trim();
     
     if (oldExt && !newName.endsWith(`.${oldExt}`)) {
       newName += `.${oldExt}`;
@@ -3780,7 +3779,7 @@ export default function Page() {
             <LayoutDashboard className="w-6 h-6 text-blue-400" />
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Rapid Revver</span>
           </div>
-          <p className="text-slate-400 text-xs mt-1">Analytics</p>
+          <p className="text-slate-400 text-xs mt-1">Analytics and Image Database</p>
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto">
