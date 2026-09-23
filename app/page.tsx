@@ -511,6 +511,13 @@ function DataIngestion() {
 // ==========================================
 // 6. MODULE: IMAGE VAULT 
 // ==========================================
+// Local helper to match backend routing
+const getBucketForAlbum = (albumName: string) => {
+  if (albumName.includes('[FR]')) return 'fuelrider-media';
+  if (albumName.includes('[MUA]')) return 'motorup-media';
+  return 'oxgord-media'; // Default
+};
+
 function ImageVault() {
   const [uploading, setUploading] = useState(false);
   const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
@@ -551,14 +558,6 @@ function ImageVault() {
 
   const [linkPrompt, setLinkPrompt] = useState<{name: string, album: string} | null>(null);
 
-  const BRAND_DOMAINS = [
-    { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
-    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
-    { id: 'fuel-rider', label: 'Fuel Rider', bucket: 'fuelrider-media', region: 'us-west-004' },
-    { id: 'motorup', label: 'MotorUp America', bucket: 'motorup-media', region: 'us-west-004' }
-  ];
-  const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
-
   useEffect(() => {
     const handleMouseUp = () => setDragMode(null);
     window.addEventListener('mouseup', handleMouseUp);
@@ -587,23 +586,22 @@ function ImageVault() {
 
   const albums = Object.keys(albumData).sort();
 
-  const getDualLinks = async (imgName: string, targetAlbum: string, brandConfig: typeof BRAND_DOMAINS[0]) => {
+  const getDualLinks = (imgName: string, targetAlbum: string) => {
     const safeAlbum = targetAlbum === 'Uncategorized' ? '' : encodeURIComponent(targetAlbum) + '/';
     const safeImgName = encodeURIComponent(imgName);
     
     const objectPath = `images/${safeAlbum}${safeImgName}`;
-    const bucketName = brandConfig.bucket;
-    const region = brandConfig.region;
+    const bucketName = getBucketForAlbum(targetAlbum); // 🚀 Directly derives Bucket from Album Name
     
     return {
-      link1: `https://${bucketName}.s3.${region}.backblazeb2.com/${objectPath}`,
-      link2: `https://s3.${region}.backblazeb2.com/${bucketName}/${objectPath}`
+      link1: `https://${bucketName}.s3.us-west-004.backblazeb2.com/${objectPath}`,
+      link2: `https://s3.us-west-004.backblazeb2.com/${bucketName}/${objectPath}`
     };
   };
 
   const handleCopyMarketplaceLink = async (imgName: string, targetAlbum: string, mp: '1' | '2' | 'ALL') => {
     try {
-      const { link1, link2 } = await getDualLinks(imgName, targetAlbum, selectedBrand);
+      const { link1, link2 } = getDualLinks(imgName, targetAlbum);
       let textToCopy = '';
       if (mp === 'ALL') {
         textToCopy = `Link 1:\n${link1}\n\nLink 2:\n${link2}`;
@@ -631,11 +629,10 @@ function ImageVault() {
     const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
     const successfulUploads: {name: string, link1: string, link2: string}[] = [];
     const totalFiles = pendingFiles.length;
-    const isMUA = activeAlbum.includes('[MUA]'); 
 
     for (let i = 0; i < totalFiles; i++) {
       const file = pendingFiles[i];
-      const safeFileName = file.name; // Removed underscore sanitization
+      const safeFileName = file.name; 
       
       setUploadStatusText(`Uploading ${i + 1} of ${totalFiles} - ${safeFileName}`);
       setUploadProgress((i / totalFiles) * 100);
@@ -650,18 +647,12 @@ function ImageVault() {
 
       try {
         const contentType = file.type || 'application/octet-stream';
-        
+        // 🚀 ONLY fires a single upload. Backend router natively places it in the correct bucket.
         const urlMain = await getPresignedUploadUrl(safeFileName, folderPrefix, contentType);
         const resMain = await fetch(urlMain, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         
         if (resMain.ok) {
-          if (isMUA) {
-            setUploadStatusText(`Syncing ${safeFileName} to MotorUp Media...`);
-            const urlMUA = await getPresignedUploadUrl(safeFileName, folderPrefix, contentType, 'motorup-media');
-            await fetch(urlMUA, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
-          }
-
-          const { link1, link2 } = await getDualLinks(safeFileName, activeAlbum, selectedBrand);
+          const { link1, link2 } = getDualLinks(safeFileName, activeAlbum);
           successfulUploads.push({ name: safeFileName, link1, link2 });
         }
       } catch (err) { 
@@ -689,11 +680,11 @@ function ImageVault() {
   const handleCopyAllLinks = async (targetAlbum: string, type: '1' | '2' | 'ALL') => {
     try {
       const imagesToCopy = albumData[targetAlbum] || [];
-      const urlsToCopy = await Promise.all(imagesToCopy.map(async (img) => {
-        const { link1, link2 } = await getDualLinks(img.name, targetAlbum, selectedBrand);
+      const urlsToCopy = imagesToCopy.map((img) => {
+        const { link1, link2 } = getDualLinks(img.name, targetAlbum);
         if (type === 'ALL') return `${img.name}:\nL1: ${link1}\nL2: ${link2}\n`;
         return type === '1' ? link1 : link2;
-      }));
+      });
 
       await navigator.clipboard.writeText(urlsToCopy.join('\n'));
       setCopiedAll(type);
@@ -743,8 +734,6 @@ function ImageVault() {
 
   const handleCreateAlbum = () => {
     if (!newAlbumName.trim() || !newAlbumCategory) return;
-    
-    // Spaces and brackets are now allowed perfectly
     const cleanName = newAlbumName.trim(); 
     const finalName = newAlbumCategory === 'None' ? cleanName : `[${newAlbumCategory}] ${cleanName}`;
     
@@ -760,9 +749,7 @@ function ImageVault() {
       setEditingAlbum(null);
       return;
     }
-    
     const newName = editAlbumText.trim();
-    
     if (localAlbums.includes(oldAlbumName) && (!albumData[oldAlbumName] || albumData[oldAlbumName].length === 0)) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
@@ -807,7 +794,6 @@ function ImageVault() {
       return;
     }
     const oldExt = oldName.includes('.') ? oldName.split('.').pop() : '';
-    
     let newName = editImageText.trim();
     
     if (oldExt && !newName.endsWith(`.${oldExt}`)) {
@@ -849,8 +835,10 @@ function ImageVault() {
         const album = parts[0];
         const name = parts.slice(1).join('/');
         const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+        const bucket = getBucketForAlbum(album);
 
-        const proxyUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(name)}`;
+        // Uses our updated API route to fetch safely
+        const proxyUrl = `/api/b2?bucket=${encodeURIComponent(bucket)}&folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(name)}`;
         const res = await fetch(proxyUrl);
         const blob = await res.blob();
         
@@ -949,7 +937,7 @@ function ImageVault() {
                 <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
               </div>
               <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-                <p className="text-xs text-slate-500">Links successfully generated with <strong className="text-blue-600">{selectedBrand.label}</strong> branding:</p>
+                <p className="text-xs text-slate-500">Links successfully generated:</p>
                 <div className="space-y-3">
                   {uploadedBatchLinks.map((item, i) => (
                     <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
@@ -1029,6 +1017,7 @@ function ImageVault() {
                 {filteredAlbums.map(album => {
                   const previewImage = albumData[album]?.[0]?.name;
                   const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
+                  const bucket = getBucketForAlbum(album); // Fetch from correct bucket
                   return (
                     <Card key={album} onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); setSelectedImages([]); } }} className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}>
                       {album !== 'Uncategorized' && (
@@ -1041,7 +1030,8 @@ function ImageVault() {
                         {previewImage ? (
                           <>
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-0 pointer-events-none" />
-                            <img src={`/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(previewImage)}`} alt={`Preview of ${album}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                            {/* 🔥 Render directly using S3 Link for ultimate speed */}
+                            <img src={`https://${bucket}.s3.us-west-004.backblazeb2.com/${encodeURIComponent(folderPrefix)}${encodeURIComponent(previewImage)}`} alt={`Preview of ${album}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           </>
                         ) : <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />}
                       </div>
@@ -1082,9 +1072,10 @@ function ImageVault() {
             {globalFilteredImages.length > 0 ? (
               <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                 {globalFilteredImages.map(imgObj => {
-                  const folderPrefix = imgObj.album === 'Uncategorized' ? 'images/' : `images/${imgObj.album}/`;
+                  const folderPrefix = imgObj.album === 'Uncategorized' ? '' : encodeURIComponent(imgObj.album) + '/';
                   const uniqueImgKey = `${imgObj.album}/${imgObj.name}`;
-                  const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgObj.name)}`;
+                  const bucket = getBucketForAlbum(imgObj.album);
+                  const imgUrl = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${folderPrefix}${encodeURIComponent(imgObj.name)}`;
                   const isSelected = selectedImages.includes(uniqueImgKey);
                   return (
                     <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
@@ -1195,7 +1186,7 @@ function ImageVault() {
               <button onClick={() => setUploadedBatchLinks(null)} className="p-1 hover:bg-slate-200 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 bg-white space-y-4">
-              <p className="text-xs text-slate-500">Links successfully generated with <strong className="text-blue-600">{selectedBrand.label}</strong> branding:</p>
+              <p className="text-xs text-slate-500">Links successfully generated:</p>
               <div className="space-y-3">
                 {uploadedBatchLinks.map((item, i) => (
                   <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
@@ -1240,13 +1231,6 @@ function ImageVault() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           
-          <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto">
-            <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Link Branding:</span>
-            <select value={selectedBrand.id} onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold w-full sm:w-auto">
-              {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-            </select>
-          </div>
-
           {currentImages.length > 0 && <Button variant="outline" onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)} disabled={isDownloading} className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}</Button>}
           {activeAlbum !== 'Uncategorized' && <Button variant="danger" onClick={() => handleDeleteAlbum(activeAlbum)} disabled={isDeletingAlbum}><Trash2 className="w-4 h-4 mr-2" /> {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}</Button>}
         </div>
@@ -1308,10 +1292,14 @@ function ImageVault() {
             <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
               {sortedFilteredImages.map(imgObj => {
                 const imgName = imgObj.name;
-                const folderPrefix = activeAlbum === 'Uncategorized' ? 'images/' : `images/${activeAlbum}/`;
+                const folderPrefix = activeAlbum === 'Uncategorized' ? '' : encodeURIComponent(activeAlbum) + '/';
                 const uniqueImgKey = `${activeAlbum}/${imgName}`;
-                const imgUrl = `/api/b2?folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(imgName)}`;
+                const bucket = getBucketForAlbum(activeAlbum as string);
+                
+                // 🚀 BLAZING FAST DIRECT S3 LINK
+                const imgUrl = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${folderPrefix}${encodeURIComponent(imgName)}`;
                 const isSelected = selectedImages.includes(uniqueImgKey);
+
                 return (
                   <div key={uniqueImgKey} onMouseDown={(e) => handleMouseDown(e, uniqueImgKey, isSelected)} onMouseEnter={() => handleMouseEnter(uniqueImgKey, isSelected)} className={`border rounded-lg overflow-hidden flex flex-col bg-white group transition-colors cursor-pointer select-none ${isSelected ? 'border-blue-500 ring-2 ring-blue-500' : 'border-slate-200'}`}>
                     <div className="h-40 bg-slate-100 flex items-center justify-center p-2 relative overflow-hidden">
@@ -1357,16 +1345,6 @@ function ImageLinksDirectory() {
   const [expandedAlbums, setExpandedAlbums] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 🚀 BRAND SELECTOR FOR TABLES
-  const BRAND_DOMAINS = [
-    { id: 'rapid-revver', label: 'Rapid Revver', bucket: 'rapid-revver', region: 'us-west-004' },
-    { id: 'oxgord', label: 'OxGord', bucket: 'oxgord-media', region: 'us-west-004' },
-    { id: 'fuel-rider', label: 'Fuel Rider', bucket: 'fuelrider-media', region: 'us-west-004' },
-    { id: 'motorup', label: 'MotorUp America', bucket: 'motorup-media', region: 'us-west-004' }
-  ];
-  const [selectedBrand, setSelectedBrand] = useState(BRAND_DOMAINS[0]);
-
-  // Group images by folder
   const albumData = useMemo(() => {
     const data: Record<string, string[]> = {};
     imagesWithDetails.forEach(file => {
@@ -1379,7 +1357,6 @@ function ImageLinksDirectory() {
     return data;
   }, [imagesWithDetails]);
 
-  // Filter albums and images based on search
   const filteredAlbums = useMemo(() => {
     const query = searchQuery.toLowerCase();
     const result: Record<string, string[]> = {};
@@ -1411,17 +1388,16 @@ function ImageLinksDirectory() {
     const safeAlbum = albumName === 'Uncategorized' ? '' : encodeURIComponent(albumName) + '/';
     const safeImgName = encodeURIComponent(imgName);
     const objectPath = `images/${safeAlbum}${safeImgName}`;
+    const bucketName = getBucketForAlbum(albumName); 
     
     return {
-      link1: `https://${selectedBrand.bucket}.s3.${selectedBrand.region}.backblazeb2.com/${objectPath}`,
-      link2: `https://s3.${selectedBrand.region}.backblazeb2.com/${selectedBrand.bucket}/${objectPath}`
+      link1: `https://${bucketName}.s3.us-west-004.backblazeb2.com/${objectPath}`,
+      link2: `https://s3.us-west-004.backblazeb2.com/${bucketName}/${objectPath}`
     };
   };
 
   return (
     <div className="space-y-6 mt-16 pt-10 border-t-2 border-slate-200 animate-in fade-in duration-500">
-      
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">🔗 Master Link Directory</h2>
@@ -1437,31 +1413,15 @@ function ImageLinksDirectory() {
               value={searchQuery} 
               onChange={e => {
                 setSearchQuery(e.target.value);
-                // Auto-expand all if searching, collapse if cleared
-                if (e.target.value.length > 0) {
-                  setExpandedAlbums(Object.keys(albumData));
-                } else {
-                  setExpandedAlbums([]);
-                }
+                if (e.target.value.length > 0) setExpandedAlbums(Object.keys(albumData));
+                else setExpandedAlbums([]);
               }} 
               className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
             />
           </div>
-
-          <div className="flex items-center bg-blue-50 border border-blue-200 p-1.5 rounded-lg w-full sm:w-auto shrink-0">
-            <span className="text-[10px] font-bold text-blue-800 mr-2 ml-1 uppercase tracking-wider">Generate For:</span>
-            <select 
-              value={selectedBrand.id} 
-              onChange={e => setSelectedBrand(BRAND_DOMAINS.find(b => b.id === e.target.value) || BRAND_DOMAINS[0])} 
-              className="border border-blue-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-blue-900 font-semibold"
-            >
-              {BRAND_DOMAINS.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-            </select>
-          </div>
         </div>
       </div>
 
-      {/* Accordion Tables */}
       <div className="space-y-4">
         {Object.keys(filteredAlbums).sort().map(album => {
           const isExpanded = expandedAlbums.includes(album);
@@ -1501,7 +1461,6 @@ function ImageLinksDirectory() {
                           <tr key={uniqueKey} className="hover:bg-slate-50 transition-colors group">
                             <td className="p-3 font-medium text-slate-800 break-words">{img}</td>
                             
-                            {/* LINK 1 COLUMN */}
                             <td className="p-3 align-top">
                               <div className="flex items-center gap-2">
                                 <div className="flex-1 overflow-hidden">
@@ -1516,7 +1475,6 @@ function ImageLinksDirectory() {
                               </div>
                             </td>
 
-                            {/* LINK 2 COLUMN */}
                             <td className="p-3 align-top">
                               <div className="flex items-center gap-2">
                                 <div className="flex-1 overflow-hidden">

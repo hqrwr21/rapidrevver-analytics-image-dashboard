@@ -1,4 +1,3 @@
-// app/actions/b2.ts
 "use server";
 
 import { 
@@ -8,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+// Connection for CSV Data (rapid-revver)
 const s3Data = new S3Client({
   endpoint: process.env.B2_DATA_ENDPOINT,
   region: process.env.B2_REGION || "us-west-004",
@@ -18,6 +18,7 @@ const s3Data = new S3Client({
   forcePathStyle: true,
 });
 
+// Connection for Images (Master Key to access OX, FR, MUA)
 const s3Images = new S3Client({
   endpoint: process.env.B2_IMAGE_ENDPOINT,
   region: process.env.B2_REGION || "us-west-004",
@@ -28,220 +29,134 @@ const s3Images = new S3Client({
   forcePathStyle: true,
 });
 
-function getS3Target(folder: string) {
+// 🚀 SMART ROUTER: Detects exact bucket based on Album name
+function getBucketForAlbum(album: string) {
+  if (album.includes('[FR]')) return 'fuelrider-media';
+  if (album.includes('[MUA]')) return 'motorup-media';
+  return 'oxgord-media'; // Default for OX or Uncategorized
+}
+
+function getS3Target(folder: string, explicitBucket?: string) {
   if (folder.startsWith("images/")) {
-    return { client: s3Images, bucket: process.env.B2_IMAGE_BUCKET! };
+    const albumName = folder.replace('images/', '').replace('/', '');
+    const bucket = explicitBucket || getBucketForAlbum(albumName);
+    return { client: s3Images, bucket };
   }
-  return { client: s3Data, bucket: process.env.B2_DATA_BUCKET! };
+  return { client: s3Data, bucket: process.env.B2_DATA_BUCKET || 'rapid-revver' };
 }
 
-// ==========================================
-// 🚀 UNLOCK CORS PERMANENTLY
-// ==========================================
 export async function unlockBackblazeCors() {
-  const corsConfig = {
-    CORSConfiguration: {
-      CORSRules: [
-        {
-          AllowedOrigins: ["*"], 
-          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"], 
-          AllowedHeaders: ["*"],
-          ExposeHeaders: ["ETag"],
-          MaxAgeSeconds: 3000,
-        },
-      ],
-    },
-  };
-
+  const corsConfig = { CORSConfiguration: { CORSRules: [{ AllowedOrigins: ["*"], AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"], AllowedHeaders: ["*"], ExposeHeaders: ["ETag"], MaxAgeSeconds: 3000 }] } };
   try {
-    await s3Data.send(new PutBucketCorsCommand({ Bucket: process.env.B2_DATA_BUCKET!, ...corsConfig }));
-    if (process.env.B2_DATA_BUCKET !== process.env.B2_IMAGE_BUCKET) {
-      await s3Images.send(new PutBucketCorsCommand({ Bucket: process.env.B2_IMAGE_BUCKET!, ...corsConfig }));
-    }
+    await s3Data.send(new PutBucketCorsCommand({ Bucket: process.env.B2_DATA_BUCKET || 'rapid-revver', ...corsConfig }));
+    await s3Images.send(new PutBucketCorsCommand({ Bucket: 'oxgord-media', ...corsConfig }));
+    await s3Images.send(new PutBucketCorsCommand({ Bucket: 'fuelrider-media', ...corsConfig }));
+    await s3Images.send(new PutBucketCorsCommand({ Bucket: 'motorup-media', ...corsConfig }));
     return { success: true };
-  } catch (error: any) {
-    console.error("CORS Unlock Error:", error);
-    return { success: false, error: error.message };
-  }
+  } catch (error: any) { return { success: false, error: error.message }; }
 }
 
-// ==========================================
-// ✏️ RENAME LOGIC
-// ==========================================
 export async function renameImageInB2(oldName: string, newName: string, folder: string) {
   const { client, bucket } = getS3Target(folder);
   try {
-    await client.send(new CopyObjectCommand({
-      Bucket: bucket,
-      CopySource: encodeURI(`${bucket}/${folder}${oldName}`),
-      Key: `${folder}${newName}`,
-    }));
-    await client.send(new DeleteObjectCommand({
-      Bucket: bucket,
-      Key: `${folder}${oldName}`
-    }));
+    await client.send(new CopyObjectCommand({ Bucket: bucket, CopySource: encodeURI(`${bucket}/${folder}${oldName}`), Key: `${folder}${newName}` }));
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${folder}${oldName}` }));
     return { success: true };
-  } catch (error: any) {
-    console.error("Rename Image Error:", error);
-    return { success: false, error: error.message };
-  }
+  } catch (error: any) { return { success: false, error: error.message }; }
 }
 
 export async function renameAlbumInB2(oldAlbum: string, newAlbum: string) {
-  const { client, bucket } = getS3Target("images/");
+  const oldBucket = getBucketForAlbum(oldAlbum);
+  const newBucket = getBucketForAlbum(newAlbum);
   const oldPrefix = `images/${oldAlbum}/`;
   const newPrefix = `images/${newAlbum}/`;
 
   try {
-    const command = new ListObjectsV2Command({ Bucket: bucket, Prefix: oldPrefix });
-    const response: any = await client.send(command);
+    const command = new ListObjectsV2Command({ Bucket: oldBucket, Prefix: oldPrefix });
+    const response: any = await s3Images.send(command);
     const files = response.Contents || [];
 
     for (const file of files) {
       if (!file.Key) continue;
       const fileName = file.Key.replace(oldPrefix, "");
-      
-      await client.send(new CopyObjectCommand({
-        Bucket: bucket,
-        CopySource: encodeURI(`${bucket}/${file.Key}`),
-        Key: `${newPrefix}${fileName}`,
-      }));
-
-      await client.send(new DeleteObjectCommand({
-        Bucket: bucket,
-        Key: file.Key
-      }));
+      await s3Images.send(new CopyObjectCommand({ Bucket: newBucket, CopySource: encodeURI(`${oldBucket}/${file.Key}`), Key: `${newPrefix}${fileName}` }));
+      await s3Images.send(new DeleteObjectCommand({ Bucket: oldBucket, Key: file.Key }));
     }
     return { success: true };
-  } catch (error: any) {
-    console.error("Rename Album Error:", error);
-    return { success: false, error: error.message };
-  }
+  } catch (error: any) { return { success: false, error: error.message }; }
 }
-
-// ==========================================
-// STANDARD B2 FUNCTIONS
-// ==========================================
 
 export async function listFiles(folder: string): Promise<string[]> {
   try {
     const { client, bucket } = getS3Target(folder);
-    let isTruncated = true;
-    let continuationToken: string | undefined = undefined;
+    let isTruncated = true, continuationToken: string | undefined = undefined;
     const allFiles: string[] = [];
-
     while (isTruncated) {
-      const command = new ListObjectsV2Command({ 
-        Bucket: bucket, 
-        Prefix: folder,
-        ContinuationToken: continuationToken
-      });
-      const response: any = await client.send(command);
-      
-      if (response.Contents) {
-        const keys = response.Contents.map((obj: any) => obj.Key?.replace(folder, "")).filter(Boolean) as string[];
-        allFiles.push(...keys);
-      }
-      
-      isTruncated = response.IsTruncated ?? false;
-      continuationToken = response.NextContinuationToken;
+      const response: any = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: folder, ContinuationToken: continuationToken }));
+      if (response.Contents) allFiles.push(...response.Contents.map((obj: any) => obj.Key?.replace(folder, "")).filter(Boolean) as string[]);
+      isTruncated = response.IsTruncated ?? false; continuationToken = response.NextContinuationToken;
     }
     return allFiles;
-  } catch (error) {
-    return [];
+  } catch (error) { return []; }
+}
+
+export async function listFilesWithDetails(folder: string): Promise<{name: string, date: number, bucket?: string}[]> {
+  if (folder === 'images/') {
+    // 🚀 NEW: Search ALL image buckets simultaneously so the dashboard shows everything
+    const buckets = ['oxgord-media', 'fuelrider-media', 'motorup-media'];
+    const allFiles: {name: string, date: number, bucket: string}[] = [];
+
+    for (const b of buckets) {
+      try {
+        let isTruncated = true, continuationToken: string | undefined = undefined;
+        while (isTruncated) {
+          const response: any = await s3Images.send(new ListObjectsV2Command({ Bucket: b, Prefix: 'images/', ContinuationToken: continuationToken }));
+          if (response.Contents) {
+            allFiles.push(...response.Contents.map((obj: any) => ({ name: obj.Key?.replace('images/', ''), date: obj.LastModified ? new Date(obj.LastModified).getTime() : 0, bucket: b })).filter((obj: any) => Boolean(obj.name)));
+          }
+          isTruncated = response.IsTruncated ?? false; continuationToken = response.NextContinuationToken;
+        }
+      } catch (e) { console.error("Error listing", b); }
+    }
+    return allFiles;
   }
+
+  // Standard CSV data lookup
+  try {
+    const { client, bucket } = getS3Target(folder);
+    let isTruncated = true, continuationToken: string | undefined = undefined;
+    const allFiles: {name: string, date: number}[] = [];
+    while (isTruncated) {
+      const response: any = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: folder, ContinuationToken: continuationToken }));
+      if (response.Contents) allFiles.push(...response.Contents.map((obj: any) => ({ name: obj.Key?.replace(folder, ""), date: obj.LastModified ? new Date(obj.LastModified).getTime() : 0 })).filter((obj: any) => Boolean(obj.name)));
+      isTruncated = response.IsTruncated ?? false; continuationToken = response.NextContinuationToken;
+    }
+    return allFiles;
+  } catch (error) { return []; }
 }
 
 export async function deleteFileFromB2(fileName: string, folder: string) {
   const { client, bucket } = getS3Target(folder);
-  const command = new DeleteObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}` });
-  await client.send(command);
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}` }));
   return true;
+}
+
+export async function getPresignedUploadUrl(fileName: string, folderPrefix: string, contentType: string) {
+  let bucketName = process.env.B2_DATA_BUCKET || 'rapid-revver';
+  let targetClient = s3Data;
+
+  // Route directly to the appropriate brand bucket based on the folder string
+  if (folderPrefix.startsWith('images/')) {
+    const albumName = folderPrefix.replace('images/', '').replace('/', '');
+    bucketName = getBucketForAlbum(albumName);
+    targetClient = s3Images;
+  }
+
+  const command = new PutObjectCommand({ Bucket: bucketName, Key: `${folderPrefix}${fileName}`, ContentType: contentType });
+  return getSignedUrl(targetClient, command, { expiresIn: 3600 });
 }
 
 export async function getPresignedDownloadUrl(fileName: string, folder: string) {
   const { client, bucket } = getS3Target(folder);
-  const command = new GetObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}` });
-  return getSignedUrl(client, command, { expiresIn: 3600 });
-}
-
-export async function getPublicB2Url(fileName: string, folder: string) {
-  const { bucket } = getS3Target(folder);
-  const endpoint = folder.startsWith("images/") ? process.env.B2_IMAGE_ENDPOINT : process.env.B2_DATA_ENDPOINT;
-  const fullPath = `${folder}${fileName}`;
-  const safePath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  return `${endpoint}/${bucket}/${safePath}`;
-}
-
-// ==========================================
-// 🛍️ NEW: MARKETPLACE MULTI-LINK GENERATOR
-// ==========================================
-export async function getMarketplaceImageUrls(fileName: string, folder: string) {
-  const rawUrl = await getPublicB2Url(fileName, folder);
-  const frBase = process.env.FR_IMAGE_BASE_URL;
-  const oxBase = process.env.OX_IMAGE_BASE_URL;
-  const sotBase = process.env.SOT_IMAGE_BASE_URL;
-  const muaBase = process.env.MUA_IMAGE_BASE_URL;
-
-  const fullPath = `${folder}${fileName}`;
-  const safePath = fullPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-
-  return {
-    fr: frBase ? `${frBase}/${safePath}` : `${rawUrl}?mp=FR`,
-    ox: oxBase ? `${oxBase}/${safePath}` : `${rawUrl}?mp=OX`,
-    sot: sotBase ? `${sotBase}/${safePath}` : `${rawUrl}?mp=SOT`,
-    mua: muaBase ? `${muaBase}/${safePath}` : `${rawUrl}?mp=MUA`,
-    raw: rawUrl
-  };
-}
-
-export async function getPresignedUploadUrl(
-  fileName: string, 
-  folderPrefix: string, 
-  contentType: string, 
-  targetBucket?: string
-) {
-  const bucketName = targetBucket || process.env.B2_IMAGE_BUCKET;
-
-  const command = new PutObjectCommand({
-    Bucket: bucketName,
-    Key: `${folderPrefix}${fileName}`,
-    ContentType: contentType,
-  });
-
-  // 🚀 FIXED: Changed 's3' to 's3Images' to match your connection client
-  return getSignedUrl(s3Images, command, { expiresIn: 3600 });
-}
-
-export async function listFilesWithDetails(folder: string): Promise<{name: string, date: number}[]> {
-  try {
-    const { client, bucket } = getS3Target(folder);
-    let isTruncated = true;
-    let continuationToken: string | undefined = undefined;
-    const allFiles: {name: string, date: number}[] = [];
-
-    while (isTruncated) {
-      const command = new ListObjectsV2Command({ 
-        Bucket: bucket, 
-        Prefix: folder,
-        ContinuationToken: continuationToken
-      });
-      const response: any = await client.send(command);
-      
-      if (response.Contents) {
-        const files = response.Contents.map((obj: any) => ({
-          name: obj.Key?.replace(folder, ""),
-          date: obj.LastModified ? new Date(obj.LastModified).getTime() : 0
-        })).filter((obj: any) => Boolean(obj.name));
-        allFiles.push(...files);
-      }
-      
-      isTruncated = response.IsTruncated ?? false;
-      continuationToken = response.NextContinuationToken;
-    }
-    
-    return allFiles;
-  } catch (error) {
-    return [];
-  }
+  return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: `${folder}${fileName}` }), { expiresIn: 3600 });
 }
