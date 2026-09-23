@@ -976,7 +976,19 @@ function ImageVault() {
         )}
 
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+          <div className="flex items-center space-x-4">
+            <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
+            <Button 
+              variant="outline" 
+              className="bg-amber-50 text-amber-700 border-amber-200"
+              onClick={async () => {
+                const res = await unlockBackblazeCors();
+                alert(res.success ? "✅ CORS unlocked for all buckets!" : "❌ Error: " + res.error);
+              }}
+            >
+              <Unlock className="w-4 h-4 mr-2" /> Unlock Bucket Security
+            </Button>
+          </div>
           <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
         </div>
 
