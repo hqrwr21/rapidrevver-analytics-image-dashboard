@@ -17,7 +17,7 @@ import {
 } from 'recharts';
 
 import { 
-  listFiles, deleteFileFromB2, getPublicB2Url, getPresignedUploadUrl, 
+  listFiles, deleteFileFromB2, getPresignedUploadUrl, 
   unlockBackblazeCors, renameImageInB2, renameAlbumInB2, listFilesWithDetails 
 } from './actions/b2';
 
