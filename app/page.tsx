@@ -2391,7 +2391,7 @@ const applyAdsColFilters = (data: any[], filters: Record<string, string>) => {
 };
 
 function AdsAnalysis() {
-  const [activeTab, setActiveTab] = useState('perf');
+  const [activeTab, setActiveTab] = useState('consolidated');
   const [refreshTrigger] = useState(0);
   const adFiles = useB2Files('marketing/', refreshTrigger);
 
@@ -2412,6 +2412,9 @@ function AdsAnalysis() {
   const [optTerms, setOptTerms] = useState(true);
   const [optRaw, setOptRaw] = useState(false);
 
+  const [consolidateBy, setConsolidateBy] = useState('Customer Search Term');
+  const [consolidationSearch, setConsolidationSearch] = useState('');
+
   const [rawAdRows, setRawAdRows] = useState<Record<string, string>[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
@@ -2424,7 +2427,8 @@ function AdsAnalysis() {
     campaigns: { key: '7 Day Total Sales', dir: 'desc' },
     adgroups: { key: '7 Day Total Sales', dir: 'desc' },
     terms: { key: 'Spend', dir: 'desc' },
-    raw: { key: '', dir: 'asc' }
+    raw: { key: '', dir: 'asc' },
+    consolidated: { key: 'Total', dir: 'desc' }
   });
 
   const [visibleAdColumns, setVisibleAdColumns] = useState<Set<string>>(new Set([
@@ -2608,6 +2612,88 @@ function AdsAnalysis() {
     }).sort((a, b) => sortBySales ? b['7 Day Total Sales'] - a['7 Day Total Sales'] : b['Spend'] - a['Spend']).slice(0, limit);
   };
 
+  // 🚀 CONSOLIDATED DATA ENGINE (Pure Addition, No Formulas, All Metics Added)
+  const consolidatedData = useMemo(() => {
+    const map = new Map<string, any>();
+    filteredData.forEach(row => {
+      let keyVal = row[consolidateBy];
+      if (!keyVal) {
+        const foundKey = Object.keys(row).find(k => k.toLowerCase() === consolidateBy.toLowerCase());
+        keyVal = foundKey ? row[foundKey] : '(Blank)';
+      }
+      if (!keyVal || keyVal.trim() === '') keyVal = '(Blank)';
+
+      if (!map.has(keyVal)) {
+        map.set(keyVal, {
+          [consolidateBy]: keyVal,
+          'Total': 0, // Explicitly renamed from '7 Day Total Sales'
+          'Spend': 0,
+          'Impressions': 0,
+          'Clicks': 0,
+          '7 Day Total Orders (#)': 0,
+          '7 Day Total Units (#)': 0,
+        });
+      }
+      
+      const item = map.get(keyVal)!;
+      const getRowVal = (headerName: string) => {
+        if (row[headerName] !== undefined) return parseNum(row[headerName]);
+        const foundK = Object.keys(row).find(k => k.toLowerCase() === headerName.toLowerCase());
+        return foundK ? parseNum(row[foundK]) : 0;
+      };
+
+      item['Total'] += getRowVal('7 Day Total Sales') || getRowVal('Sales');
+      item['Spend'] += getRowVal('Spend');
+      item['Impressions'] += getRowVal('Impressions');
+      item['Clicks'] += getRowVal('Clicks');
+      item['7 Day Total Orders (#)'] += getRowVal('7 Day Total Orders (#)') || getRowVal('Orders');
+      item['7 Day Total Units (#)'] += getRowVal('7 Day Total Units (#)') || getRowVal('Units');
+    });
+
+    return Array.from(map.values());
+  }, [filteredData, consolidateBy]);
+
+  const finalConsolidatedData = useMemo(() => {
+    let filtered = consolidatedData;
+    if (consolidationSearch.trim()) {
+      const q = consolidationSearch.toLowerCase();
+      filtered = filtered.filter(row => String(row[consolidateBy]).toLowerCase().includes(q));
+    }
+    return sortData(filtered, sortConfigs.consolidated);
+  }, [consolidatedData, consolidationSearch, sortConfigs.consolidated, consolidateBy]);
+
+  const CONSOLIDATED_HEADERS = [
+    consolidateBy, 
+    'Total', 
+    'Spend', 
+    'Impressions', 
+    'Clicks', 
+    '7 Day Total Orders (#)', 
+    '7 Day Total Units (#)'
+  ];
+
+  // 🚀 Calculate robust Grand Totals for the table footer
+  const consolidatedTotals = useMemo(() => {
+    let totals: Record<string, number> = {
+      'Total': 0,
+      'Spend': 0,
+      'Impressions': 0,
+      'Clicks': 0,
+      '7 Day Total Orders (#)': 0,
+      '7 Day Total Units (#)': 0
+    };
+    
+    finalConsolidatedData.forEach(row => {
+      totals['Total'] += row['Total'] || 0;
+      totals['Spend'] += row['Spend'] || 0;
+      totals['Impressions'] += row['Impressions'] || 0;
+      totals['Clicks'] += row['Clicks'] || 0;
+      totals['7 Day Total Orders (#)'] += row['7 Day Total Orders (#)'] || 0;
+      totals['7 Day Total Units (#)'] += row['7 Day Total Units (#)'] || 0;
+    });
+    return totals;
+  }, [finalConsolidatedData]);
+
   const topCampaignsRaw = useMemo(() => aggregateGroup('Campaign Name', cRowLimit, true), [filteredData, cRowLimit]);
   const topAdGroupsRaw = useMemo(() => aggregateGroup('Ad Group Name', gRowLimit, true), [filteredData, gRowLimit]);
   const topTermsRaw = useMemo(() => aggregateGroup('Customer Search Term', tRowLimit, false), [filteredData, tRowLimit]);
@@ -2643,7 +2729,7 @@ function AdsAnalysis() {
   const renderAdValue = (col: string, val: any) => {
     if (typeof val === 'number') {
       if (col.includes('Rate') || col.includes('(CTR)') || col.includes('(ACOS)')) return `${val.toFixed(2)}%`;
-      if (col.includes('Spend') || col.includes('Sales') || col.includes('(CPC)')) return `$${val.toFixed(2)}`;
+      if (col.includes('Spend') || col.includes('Sales') || col === 'Total' || col.includes('(CPC)')) return `$${val.toFixed(2)}`;
       if (col.includes('(ROAS)')) return val.toFixed(2);
       return val.toLocaleString();
     }
@@ -2713,6 +2799,7 @@ function AdsAnalysis() {
         <div className="lg:col-span-3 space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-2 mb-4 gap-4">
             <div className="flex overflow-x-auto w-full sm:w-auto space-x-2">
+              <button onClick={() => setActiveTab('consolidated')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'consolidated' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Consolidated Pivot</button>
               <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview</button>
               <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Raw Data Vault</button>
               <button onClick={() => setActiveTab('export')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Export Hub</button>
@@ -2775,6 +2862,82 @@ function AdsAnalysis() {
             </Card>
           ) : (
             <>
+              {activeTab === 'consolidated' && (
+                <Card className="p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
+                    <div>
+                      <h3 className="font-semibold text-slate-800">Consolidated Pivot Table</h3>
+                      <p className="text-xs text-slate-500 font-medium">Group and aggregate your raw data without complex formulas.</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                      <div className="flex items-center bg-slate-50 border border-slate-200 p-1.5 rounded-lg w-full sm:w-auto">
+                        <span className="text-[10px] font-bold text-slate-600 mr-2 ml-1 uppercase tracking-wider">Group By:</span>
+                        <select 
+                          value={consolidateBy} 
+                          onChange={e => setConsolidateBy(e.target.value)} 
+                          className="border border-slate-300 p-1 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none text-slate-800 font-semibold"
+                        >
+                          <option value="Customer Search Term">Customer Search Term</option>
+                          <option value="Campaign Name">Campaign</option>
+                          <option value="Ad Group Name">Ad Group</option>
+                          <option value="Match Type">Match Type</option>
+                          <option value="Targeting">Targeting Type</option>
+                        </select>
+                      </div>
+                      <input 
+                        type="text" 
+                        placeholder={`Search ${consolidateBy}...`} 
+                        value={consolidationSearch}
+                        onChange={e => setConsolidationSearch(e.target.value)}
+                        className="border border-slate-300 p-1.5 rounded text-xs w-full sm:w-48 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <Button onClick={() => downloadCSV(finalConsolidatedData, `consolidated_ads_data.csv`)} className="bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg">
+                    <table className="w-full text-xs text-left whitespace-nowrap">
+                      <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
+                        <tr>
+                          {CONSOLIDATED_HEADERS.map(k => (
+                            <th key={k} className="p-2.5 text-slate-700 cursor-pointer hover:bg-slate-200 select-none transition-colors font-bold" onClick={() => handleSort('consolidated', k)}>
+                              <div className="flex items-center whitespace-nowrap">
+                                {k} <SortIcon table="consolidated" colKey={k} />
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {finalConsolidatedData.slice(0, 500).map((row, i) => (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            {CONSOLIDATED_HEADERS.map(k => (
+                              <td key={k} className={`p-2.5 truncate max-w-[300px] ${k === consolidateBy ? 'font-semibold text-slate-900' : k === 'Total' ? 'font-bold text-emerald-600' : ''}`}>
+                                {renderAdValue(k, row[k])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        {/* 🚀 GRAND TOTAL ROW */}
+                        {finalConsolidatedData.length > 0 && (
+                          <tr className="bg-slate-100 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+                            {CONSOLIDATED_HEADERS.map((k, i) => {
+                              if (i === 0) return <td key={k} className="p-2.5 font-black text-slate-900 uppercase tracking-wider text-right pr-4">Grand Total:</td>;
+                              return <td key={k} className={`p-2.5 font-bold text-slate-900 ${k === 'Total' ? 'text-emerald-700' : ''}`}>
+                                {renderAdValue(k, consolidatedTotals[k])}
+                              </td>;
+                            })}
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    {finalConsolidatedData.length === 0 && <div className="text-center p-8 text-slate-400">No results match your search.</div>}
+                  </div>
+                </Card>
+              )}
+
               {activeTab === 'perf' && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2965,7 +3128,7 @@ function AdsAnalysis() {
                   <Card className="p-6 space-y-4">
                     <h3 className="font-semibold text-slate-800">Standalone PDF Generation</h3>
                     <p className="text-sm text-slate-500">Generate a formatted executive summary for offline viewing.</p>
-                    <Button onClick={() => window.print()}>Print / Save Executive Summary</Button>
+                    <Button onClick={() => window.print()} className="w-full">Print / Save Executive Summary</Button>
                   </Card>
 
                   <Card className="p-6 space-y-4">
@@ -2995,6 +3158,12 @@ function AdsAnalysis() {
                       
                       downloadCSV(exportDataset, 'Amazon_Advertising_Export.csv');
                     }}>Download Selected Views (CSV)</Button>
+
+                    <div className="pt-2">
+                      <Button onClick={() => downloadCSV(finalConsolidatedData, 'Amazon_Ads_Consolidated.csv')} className="w-full justify-start bg-emerald-600 hover:bg-emerald-700">
+                        <Download className="w-4 h-4 mr-2" /> Download Consolidated Data Only
+                      </Button>
+                    </div>
                   </Card>
                 </div>
               )}
