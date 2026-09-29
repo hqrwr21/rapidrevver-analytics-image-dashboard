@@ -3877,6 +3877,159 @@ function CatalogMonitor() {
 }
 
 // ==========================================
+// 7.5 MODULE: IMAGE REPORTS TAB
+// ==========================================
+function ImageReportsTab() {
+  const imagesWithDetails = useB2FilesWithDetails('images/', 0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [brandFilter, setBrandFilter] = useState('All');
+  const [albumFilter, setAlbumFilter] = useState('All');
+  const [copied, setCopied] = useState(false);
+
+  const parsedData = useMemo(() => {
+    let motorUpCount = 0;
+    let fuelRiderCount = 0;
+    let oxGordCount = 0;
+
+    const items = imagesWithDetails.map(item => {
+      const fileName = item.name || '';
+      const sizeObj = (item as any).size || 0;
+      const timestamp = item.date || null;
+      
+      let brand = 'OxGord';
+      if (fileName.includes('[MUA]')) brand = 'MotorUp';
+      else if (fileName.includes('[FR]')) brand = 'FuelRider';
+
+      if (brand === 'MotorUp') motorUpCount++;
+      else if (brand === 'FuelRider') fuelRiderCount++;
+      else oxGordCount++;
+
+      let album = 'Uncategorized';
+      if (fileName.includes('/')) {
+        album = fileName.substring(0, fileName.lastIndexOf('/'));
+      }
+
+      let bucket = 'oxgord-media';
+      if (brand === 'MotorUp') bucket = 'motorup-media';
+      if (brand === 'FuelRider') bucket = 'fuelrider-media';
+      
+      const safeAlbum = album === 'Uncategorized' ? '' : encodeURIComponent(album) + '/';
+      const safeName = fileName.includes('/') ? fileName.substring(fileName.lastIndexOf('/') + 1) : fileName;
+      const url = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${safeAlbum}${encodeURIComponent(safeName)}`;
+
+      const dateStr = timestamp ? new Date(timestamp).toLocaleDateString() : '-';
+      const sizeMB = sizeObj > 0 ? (sizeObj / (1024 * 1024)).toFixed(2) + ' MB' : '-';
+
+      return { fileName, brand, album, sizeMB, rawSize: sizeObj, dateStr, url };
+    });
+
+    return { items, motorUpCount, fuelRiderCount, oxGordCount };
+  }, [imagesWithDetails]);
+
+  const filteredItems = useMemo(() => {
+    return parsedData.items.filter(item => {
+      const matchesSearch = item.fileName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesBrand = brandFilter === 'All' || item.brand === brandFilter;
+      const matchesAlbum = albumFilter === 'All' || item.album === albumFilter;
+      return matchesSearch && matchesBrand && matchesAlbum;
+    });
+  }, [parsedData.items, searchQuery, brandFilter, albumFilter]);
+
+  const uniqueAlbums = useMemo(() => Array.from(new Set(parsedData.items.map(i => i.album))).sort(), [parsedData.items]);
+
+  const handleExportCSV = () => {
+    const csvContent = "File Name,Brand,Album,Size,Upload Date,Direct URL\n" + 
+      filteredItems.map(item => `"${item.fileName}","${item.brand}","${item.album}","${item.sizeMB}","${item.dateStr}","${item.url}"`).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Image_Vault_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const handleCopyUrls = () => {
+    navigator.clipboard.writeText(filteredItems.map(i => i.url).join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">Total Library Assets</p><p className="text-2xl font-bold mt-1">{parsedData.items.length.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">OxGord Media</p><p className="text-2xl font-bold mt-1 text-blue-600">{parsedData.oxGordCount.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">MotorUp Media</p><p className="text-2xl font-bold mt-1 text-emerald-600">{parsedData.motorUpCount.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">FuelRider Media</p><p className="text-2xl font-bold mt-1 text-amber-600">{parsedData.fuelRiderCount.toLocaleString()}</p></Card>
+      </div>
+
+      <Card className="p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
+          <div><h3 className="font-semibold text-slate-800">Master Directory Report</h3><p className="text-xs text-slate-500 font-medium">Showing {filteredItems.length} filtered files.</p></div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button onClick={handleCopyUrls} variant="secondary" className="bg-slate-100 whitespace-nowrap">{copied ? '✅ URLs Copied!' : '📋 Copy All URLs'}</Button>
+            <Button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> Export to Excel/CSV</Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div><label className="block text-xs font-bold text-slate-700 uppercase mb-1">Search File Name</label><input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs outline-none" /></div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Brand Category</label>
+            <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white outline-none">
+              <option value="All">All Brands</option><option value="OxGord">OxGord</option><option value="MotorUp">MotorUp</option><option value="FuelRider">FuelRider</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Album</label>
+            <select value={albumFilter} onChange={e => setAlbumFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white outline-none">
+              <option value="All">All Albums</option>{uniqueAlbums.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg mt-4">
+          <table className="w-full text-xs text-left whitespace-nowrap">
+            <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr className="text-slate-700 uppercase">{['File Name', 'Brand Category', 'Album', 'Size', 'Date'].map(k => <th key={k} className="p-3 font-bold">{k}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredItems.slice(0, 500).map((row, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-3 font-medium text-slate-900 truncate max-w-[250px]" title={row.fileName}>{row.fileName}</td>
+                  <td className="p-3"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${row.brand === 'MotorUp' ? 'bg-emerald-100 text-emerald-800' : row.brand === 'FuelRider' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{row.brand}</span></td>
+                  <td className="p-3 text-slate-600 truncate max-w-[200px]">{row.album}</td>
+                  <td className="p-3 text-slate-500">{row.sizeMB}</td><td className="p-3 text-slate-500">{row.dateStr}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredItems.length === 0 && <div className="text-center p-8 text-slate-400">No images match your filters.</div>}
+          {filteredItems.length > 500 && <div className="text-center text-xs text-slate-400 p-2 border-t bg-slate-50">Showing first 500 records. Use export to view all.</div>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ==========================================
+// 7.8 MODULE: IMAGE WORKSPACE WRAPPER
+// ==========================================
+function ImageWorkspace() {
+  const [activeTab, setActiveTab] = useState('vault');
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex border-b border-slate-200 overflow-x-auto">
+        <button onClick={() => setActiveTab('vault')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'vault' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Visual Vault</button>
+        <button onClick={() => setActiveTab('directory')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'directory' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Link Directory</button>
+        <button onClick={() => setActiveTab('report')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'report' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Master Directory Report</button>
+      </div>
+
+      <div className={activeTab === 'vault' ? 'block' : 'hidden'}><ImageVault /></div>
+      <div className={activeTab === 'directory' ? 'block' : 'hidden'}><ImageLinksDirectory /></div>
+      <div className={activeTab === 'report' ? 'block' : 'hidden'}><ImageReportsTab /></div>
+    </div>
+  );
+}
+
+// ==========================================
 // 15. MAIN APPLICATION WRAPPER
 // ==========================================
 export default function Page() {
@@ -3977,13 +4130,8 @@ export default function Page() {
           <div className="max-w-[1400px] mx-auto">
             {activeModule === 'ingestion' && <DataIngestion />}
             
-            {/* 🚀 Updated Images section to include both components! */}
-            {activeModule === 'images' && (
-              <>
-                <ImageVault />
-                <ImageLinksDirectory />
-              </>
-            )}
+            {/* 🚀 Consolidated Image Workspace with tabs */}
+            {activeModule === 'images' && <ImageWorkspace />}
 
             {activeModule === 'masterlist' && <MasterlistWorkspace />}
             {activeModule === 'catalog' && <MasterCatalog />}
