@@ -518,15 +518,12 @@ const getBucketForAlbum = (albumName: string) => {
   return 'oxgord-media'; // Default
 };
 
-function ImageVault() {
+function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[], setRefresh: any }) {
   const [uploading, setUploading] = useState(false);
   const [isDeletingAlbum, setIsDeletingAlbum] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const [copiedKey, setCopiedKey] = useState('');
   const [copiedAll, setCopiedAll] = useState<string | false>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const imagesWithDetails = useB2FilesWithDetails('images/', refresh);
 
   const [activeAlbum, setActiveAlbum] = useState<string | null>(null);
   const [localAlbums, setLocalAlbums] = useState<string[]>([]);
@@ -591,7 +588,7 @@ function ImageVault() {
     const safeImgName = encodeURIComponent(imgName);
     
     const objectPath = `images/${safeAlbum}${safeImgName}`;
-    const bucketName = getBucketForAlbum(targetAlbum); // 🚀 Directly derives Bucket from Album Name
+    const bucketName = getBucketForAlbum(targetAlbum);
     
     return {
       link1: `https://${bucketName}.s3.us-west-004.backblazeb2.com/${objectPath}`,
@@ -647,7 +644,6 @@ function ImageVault() {
 
       try {
         const contentType = file.type || 'application/octet-stream';
-        // 🚀 ONLY fires a single upload. Backend router natively places it in the correct bucket.
         const urlMain = await getPresignedUploadUrl(safeFileName, folderPrefix, contentType);
         const resMain = await fetch(urlMain, { method: 'PUT', body: file, headers: { 'Content-Type': contentType }});
         
@@ -668,7 +664,7 @@ function ImageVault() {
       setPendingFiles([]);
       setUploading(false);
       setUploadProgress(0);
-      setRefresh(r => r + 1);
+      setRefresh((r: number) => r + 1);
       if (successfulUploads.length > 0) {
         setUploadedBatchLinks(successfulUploads);
       } else {
@@ -761,7 +757,7 @@ function ImageVault() {
     if (res.success) {
       setLocalAlbums(prev => prev.map(a => a === oldAlbumName ? newName : a));
       setEditingAlbum(null);
-      setRefresh(r => r + 1);
+      setRefresh((r: number) => r + 1);
     } else {
       alert("Failed to rename album: " + res.error);
     }
@@ -785,7 +781,7 @@ function ImageVault() {
     }
     setLocalAlbums(prev => prev.filter(a => a !== albumName));
     if (activeAlbum === albumName) setActiveAlbum(null);
-    setRefresh(r => r + 1);
+    setRefresh((r: number) => r + 1);
   };
 
   const handleRenameImage = async (oldName: string, targetAlbum: string) => {
@@ -805,7 +801,7 @@ function ImageVault() {
     setUploading(false);
     if (res.success) {
       setEditingImage(null);
-      setRefresh(r => r + 1);
+      setRefresh((r: number) => r + 1);
     } else {
       alert("Failed to rename image: " + res.error);
     }
@@ -814,7 +810,7 @@ function ImageVault() {
   const handleDeleteImage = async (imgName: string, targetAlbum: string) => {
     const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
     await deleteFileFromB2(imgName, folderPrefix);
-    setRefresh(r => r + 1);
+    setRefresh((r: number) => r + 1);
   };
 
   const cycleSortOrder = () => {
@@ -837,7 +833,6 @@ function ImageVault() {
         const folderPrefix = album === 'Uncategorized' ? 'images/' : `images/${album}/`;
         const bucket = getBucketForAlbum(album);
 
-        // Uses our updated API route to fetch safely
         const proxyUrl = `/api/b2?bucket=${encodeURIComponent(bucket)}&folder=${encodeURIComponent(folderPrefix)}&file=${encodeURIComponent(name)}`;
         const res = await fetch(proxyUrl);
         const blob = await res.blob();
@@ -975,23 +970,6 @@ function ImageVault() {
           </div>
         )}
 
-        <div>
-          <div className="flex items-center space-x-4">
-            <h2 className="text-2xl font-bold text-slate-900">📷 Image Vault</h2>
-            <Button 
-              variant="outline" 
-              className="bg-amber-50 text-amber-700 border-amber-200"
-              onClick={async () => {
-                const res = await unlockBackblazeCors();
-                alert(res.success ? "✅ CORS unlocked for all buckets!" : "❌ Error: " + res.error);
-              }}
-            >
-              <Unlock className="w-4 h-4 mr-2" /> Unlock Bucket Security
-            </Button>
-          </div>
-          <p className="text-slate-500 mt-1">Organize, batch upload, and search your entire media library.</p>
-        </div>
-
         <Card className="p-6">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
             
@@ -1042,7 +1020,6 @@ function ImageVault() {
                         {previewImage ? (
                           <>
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent z-0 pointer-events-none" />
-                            {/* 🔥 Render directly using S3 Link for ultimate speed */}
                             <img src={`https://${bucket}.s3.us-west-004.backblazeb2.com/${encodeURIComponent(folderPrefix)}${encodeURIComponent(previewImage)}`} alt={`Preview of ${album}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           </>
                         ) : <Folder className="w-12 h-12 text-blue-300 group-hover:text-blue-400 transition-colors" />}
@@ -1148,7 +1125,7 @@ function ImageVault() {
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setLinkPrompt(null)}>
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-slate-800 text-lg mb-1">Copy Image Link</h3>
-            <p className="text-xs text-slate-500 mb-5 truncate font-medium" title={linkPrompt.name}>File: {linkPrompt.name}</p>
+            <p className="text-xs text-slate-50 mb-5 truncate font-medium" title={linkPrompt.name}>File: {linkPrompt.name}</p>
             
             <div className="space-y-2.5">
               <button 
@@ -1183,7 +1160,9 @@ function ImageVault() {
       {expandedImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
           <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]"><X className="w-6 h-6" /></button>
+            <button onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]">
+              <X className="w-6 h-6" />
+            </button>
             <img src={expandedImage} alt="Expanded View" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
           </div>
         </div>
@@ -1280,7 +1259,7 @@ function ImageVault() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
           <div className="flex items-center space-x-3"><h3 className="text-lg font-semibold text-slate-800">Uploaded Images</h3><span className="text-sm font-medium text-slate-500">{sortedFilteredImages.length} items</span></div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {currentImages.length > 0 && <div className="relative w-full sm:w-64 mr-2"><Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" /><input type="text" placeholder="Find image..." value={imageSearch} onChange={e => { setImageSearch(e.target.value); setSelectedImages([]); }} className="border border-slate-300 p-1.5 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>}
@@ -1351,8 +1330,7 @@ function ImageVault() {
 // ==========================================
 // 7. MODULE: IMAGE LINKS DIRECTORY
 // ==========================================
-function ImageLinksDirectory() {
-  const imagesWithDetails = useB2FilesWithDetails('images/', 0);
+function ImageLinksDirectory({ imagesWithDetails }: { imagesWithDetails: any[] }) {
   const [copiedKey, setCopiedKey] = useState('');
   const [expandedAlbums, setExpandedAlbums] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1409,13 +1387,8 @@ function ImageLinksDirectory() {
   };
 
   return (
-    <div className="space-y-6 mt-16 pt-10 border-t-2 border-slate-200 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">🔗 Master Link Directory</h2>
-          <p className="text-slate-500 mt-1">Export your generated links in bulk, organized by folder.</p>
-        </div>
-        
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-end items-start md:items-end gap-4">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
@@ -1518,6 +1491,359 @@ function ImageLinksDirectory() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 7.5 MODULE: IMAGE REPORTS TAB
+// ==========================================
+function ImageReportsTab({ imagesWithDetails }: { imagesWithDetails: any[] }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [brandFilter, setBrandFilter] = useState('All');
+  const [albumFilter, setAlbumFilter] = useState('All');
+  const [copied, setCopied] = useState(false);
+
+  const parsedData = useMemo(() => {
+    let motorUpCount = 0;
+    let fuelRiderCount = 0;
+    let oxGordCount = 0;
+
+    const items = imagesWithDetails.map(item => {
+      const fileName = item.name || '';
+      const sizeObj = (item as any).size || 0;
+      const timestamp = item.date || null;
+      
+      let brand = 'OxGord';
+      if (fileName.includes('[MUA]')) brand = 'MotorUp';
+      else if (fileName.includes('[FR]')) brand = 'FuelRider';
+
+      if (brand === 'MotorUp') motorUpCount++;
+      else if (brand === 'FuelRider') fuelRiderCount++;
+      else oxGordCount++;
+
+      let album = 'Uncategorized';
+      if (fileName.includes('/')) {
+        album = fileName.substring(0, fileName.lastIndexOf('/'));
+      }
+
+      let bucket = 'oxgord-media';
+      if (brand === 'MotorUp') bucket = 'motorup-media';
+      if (brand === 'FuelRider') bucket = 'fuelrider-media';
+      
+      const safeAlbum = album === 'Uncategorized' ? '' : encodeURIComponent(album) + '/';
+      const safeName = fileName.includes('/') ? fileName.substring(fileName.lastIndexOf('/') + 1) : fileName;
+      const url = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${safeAlbum}${encodeURIComponent(safeName)}`;
+
+      const dateStr = timestamp ? new Date(timestamp).toLocaleDateString() : '-';
+      const sizeMB = sizeObj > 0 ? (sizeObj / (1024 * 1024)).toFixed(2) + ' MB' : '-';
+
+      return { fileName, brand, album, sizeMB, rawSize: sizeObj, dateStr, url };
+    });
+
+    return { items, motorUpCount, fuelRiderCount, oxGordCount };
+  }, [imagesWithDetails]);
+
+  const filteredItems = useMemo(() => {
+    return parsedData.items.filter(item => {
+      const matchesSearch = item.fileName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesBrand = brandFilter === 'All' || item.brand === brandFilter;
+      const matchesAlbum = albumFilter === 'All' || item.album === albumFilter;
+      return matchesSearch && matchesBrand && matchesAlbum;
+    });
+  }, [parsedData.items, searchQuery, brandFilter, albumFilter]);
+
+  const uniqueAlbums = useMemo(() => Array.from(new Set(parsedData.items.map(i => i.album))).sort(), [parsedData.items]);
+
+  const handleExportCSV = () => {
+    const csvContent = "File Name,Brand,Album,Size,Upload Date,Direct URL\n" + 
+      filteredItems.map(item => `"${item.fileName}","${item.brand}","${item.album}","${item.sizeMB}","${item.dateStr}","${item.url}"`).join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Image_Vault_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const handleCopyUrls = () => {
+    navigator.clipboard.writeText(filteredItems.map(i => i.url).join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">Total Library Assets</p><p className="text-2xl font-bold mt-1">{parsedData.items.length.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">OxGord Media</p><p className="text-2xl font-bold mt-1 text-blue-600">{parsedData.oxGordCount.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">MotorUp Media</p><p className="text-2xl font-bold mt-1 text-emerald-600">{parsedData.motorUpCount.toLocaleString()}</p></Card>
+        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">FuelRider Media</p><p className="text-2xl font-bold mt-1 text-amber-600">{parsedData.fuelRiderCount.toLocaleString()}</p></Card>
+      </div>
+
+      <Card className="p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <h3 className="font-semibold text-slate-800">Master Directory Report</h3>
+            <p className="text-xs text-slate-500 font-medium">Showing {filteredItems.length} filtered files.</p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button onClick={handleCopyUrls} variant="secondary" className="bg-slate-100 whitespace-nowrap">
+              {copied ? '✅ URLs Copied!' : '📋 Copy All URLs'}
+            </Button>
+            <Button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap">
+              <Download className="w-4 h-4 mr-2" /> Export to Excel/CSV
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Search File Name</label>
+            <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Brand Category</label>
+            <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="All">All Brands</option>
+              <option value="OxGord">OxGord</option>
+              <option value="MotorUp">MotorUp</option>
+              <option value="FuelRider">FuelRider</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Album / Folder</label>
+            <select value={albumFilter} onChange={e => setAlbumFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="All">All Albums</option>
+              {uniqueAlbums.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg mt-4">
+          <table className="w-full text-xs text-left whitespace-nowrap">
+            <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
+              <tr>
+                {['File Name', 'Brand Category', 'Album / Path', 'Size', 'Date'].map(k => (
+                  <th key={k} className="p-3 text-slate-700 font-bold uppercase tracking-wider">{k}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredItems.slice(0, 500).map((row, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-3 font-medium text-slate-900 truncate max-w-[250px]" title={row.fileName}>{row.fileName}</td>
+                  <td className="p-3"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${row.brand === 'MotorUp' ? 'bg-emerald-100 text-emerald-800' : row.brand === 'FuelRider' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{row.brand}</span></td>
+                  <td className="p-3 text-slate-600 truncate max-w-[200px]">{row.album}</td>
+                  <td className="p-3 text-slate-500">{row.sizeMB}</td>
+                  <td className="p-3 text-slate-500">{row.dateStr}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredItems.length === 0 && <div className="text-center p-8 text-slate-400">No images match your filters.</div>}
+          {filteredItems.length > 500 && <div className="text-center text-xs text-slate-400 p-2 border-t bg-slate-50">Showing first 500 records to maintain performance. Use export to view all.</div>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ==========================================
+// 7.6 MODULE: IMAGE PART NUMBER TAB
+// ==========================================
+function ImagePartNumberTab({ imagesWithDetails }: { imagesWithDetails: any[] }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedParts, setExpandedParts] = useState<string[]>([]);
+  const [copiedKey, setCopiedKey] = useState('');
+
+  const groupedData = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    
+    imagesWithDetails.forEach(item => {
+      const fileName = item.name || '';
+      if (!fileName) return;
+      
+      // 1. Extract Brand and Bucket
+      let brand = 'OxGord';
+      if (fileName.includes('[MUA]')) brand = 'MotorUp';
+      else if (fileName.includes('[FR]')) brand = 'FuelRider';
+      
+      let bucket = 'oxgord-media';
+      if (brand === 'MotorUp') bucket = 'motorup-media';
+      if (brand === 'FuelRider') bucket = 'fuelrider-media';
+
+      // 2. Extract Album & URLs
+      let album = 'Uncategorized';
+      if (fileName.includes('/')) {
+        album = fileName.substring(0, fileName.lastIndexOf('/'));
+      }
+      const safeAlbum = album === 'Uncategorized' ? '' : encodeURIComponent(album) + '/';
+      const safeName = fileName.includes('/') ? fileName.substring(fileName.lastIndexOf('/') + 1) : fileName;
+      
+      const url1 = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${safeAlbum}${encodeURIComponent(safeName)}`;
+      const url2 = `https://s3.us-west-004.backblazeb2.com/${bucket}/images/${safeAlbum}${encodeURIComponent(safeName)}`;
+
+      // 3. 🚀 UPDATED: Smart Part Number Extractor
+      let cleanName = safeName;
+      cleanName = cleanName.replace(/\[.*?\]\s*/g, ''); // Remove [Brand]
+      cleanName = cleanName.replace(/\.[^/.]+$/, ''); // Remove .jpg, .png
+      cleanName = cleanName.replace(/\s*\(\d+\)$/, ''); // Remove (1), (2)
+      cleanName = cleanName.replace(/[_-](main|front|back|side|top|bottom|hero|pt\d+|alt\d*|\d{1,2})$/i, ''); // Remove image positioning suffixes
+      
+      // Handle long descriptive titles
+      const nameTokens = cleanName.trim().split(/\s+/);
+      let partNumber = nameTokens[nameTokens.length - 1] || 'Unknown';
+
+      if (!groups[partNumber]) groups[partNumber] = [];
+      groups[partNumber].push({ fileName: safeName, album, brand, url1, url2 });
+    });
+    
+    return groups;
+  }, [imagesWithDetails]);
+
+  const filteredParts = useMemo(() => {
+    if (!searchQuery.trim()) return Object.keys(groupedData).sort();
+    const query = searchQuery.toLowerCase();
+    return Object.keys(groupedData)
+      .filter(pn => pn.toLowerCase().includes(query))
+      .sort();
+  }, [groupedData, searchQuery]);
+
+  const togglePart = (pn: string) => {
+    setExpandedParts(prev => prev.includes(pn) ? prev.filter(p => p !== pn) : [...prev, pn]);
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(''), 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <Card className="p-6 space-y-4 bg-slate-50/50">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <h3 className="font-semibold text-slate-800 text-lg">SKU / Part Number Matcher</h3>
+            <p className="text-xs text-slate-500 font-medium mt-1">Images automatically grouped by their root Part Number.</p>
+          </div>
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search Part Number..." 
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                if (e.target.value.length > 0) setExpandedParts(Object.keys(groupedData));
+                else setExpandedParts([]);
+              }}
+              className="border border-slate-300 p-2 pl-9 rounded-md text-sm bg-white w-full focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3 max-h-[650px] overflow-y-auto pr-2">
+          {filteredParts.map(pn => {
+            const images = groupedData[pn];
+            const isExpanded = expandedParts.includes(pn);
+            return (
+              <div key={pn} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+                <button 
+                  onClick={() => togglePart(pn)}
+                  className="w-full flex justify-between items-center p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <span className="font-bold text-slate-800 text-lg">{pn}</span>
+                    <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">{images.length} images</span>
+                  </div>
+                  {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                </button>
+                
+                {isExpanded && (
+                  <div className="p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {images.map((img: any, idx: number) => {
+                      const uniqueKey = `${pn}_${idx}`;
+                      return (
+                        <div key={uniqueKey} className="border border-slate-200 rounded-lg bg-white overflow-hidden flex flex-col shadow-sm group">
+                          <div className="h-32 bg-slate-100 flex items-center justify-center p-2 relative">
+                            <img src={img.url1} alt={img.fileName} className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                            <span className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm ${img.brand === 'MotorUp' ? 'bg-emerald-100 text-emerald-800' : img.brand === 'FuelRider' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                              {img.brand}
+                            </span>
+                          </div>
+                          <div className="p-2.5 space-y-2 flex-1 flex flex-col">
+                            <p className="text-[10px] font-medium text-slate-700 truncate" title={img.fileName}>{img.fileName}</p>
+                            <div className="grid grid-cols-2 gap-1.5 mt-auto pt-2 border-t border-slate-100">
+                              <button onClick={() => copyToClipboard(img.url1, `${uniqueKey}_1`)} className={`py-1.5 text-[10px] font-bold rounded shadow-sm transition-colors ${copiedKey === `${uniqueKey}_1` ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700 border border-slate-200'}`}>
+                                {copiedKey === `${uniqueKey}_1` ? 'Copied' : 'Link 1'}
+                              </button>
+                              <button onClick={() => copyToClipboard(img.url2, `${uniqueKey}_2`)} className={`py-1.5 text-[10px] font-bold rounded shadow-sm transition-colors ${copiedKey === `${uniqueKey}_2` ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700 border border-slate-200'}`}>
+                                {copiedKey === `${uniqueKey}_2` ? 'Copied' : 'Link 2'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {filteredParts.length === 0 && (
+            <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-white">No part numbers match "{searchQuery}".</div>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ==========================================
+// 7.8 MODULE: IMAGE WORKSPACE WRAPPER
+// ==========================================
+function ImageWorkspace() {
+  const [activeTab, setActiveTab] = useState('vault');
+  const [refresh, setRefresh] = useState(0);
+
+  // 🚀 CENTRALIZED FETCH: Only fetches your 5,000+ images ONCE
+  const imagesWithDetails = useB2FilesWithDetails('images/', refresh);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Image Management Hub</h2>
+            <p className="text-slate-500 mt-1">Organize, batch upload, audit, and export your entire media library.</p>
+          </div>
+          <Button 
+            variant="outline" 
+            className="bg-amber-50 text-amber-700 border-amber-200 w-full sm:w-auto"
+            onClick={async () => {
+              const res = await unlockBackblazeCors();
+              alert(res.success ? "✅ CORS unlocked for all buckets!" : "❌ Error: " + res.error);
+            }}
+          >
+            <Unlock className="w-4 h-4 mr-2" /> Unlock Bucket Security
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex border-b border-slate-200 overflow-x-auto">
+        <button onClick={() => setActiveTab('vault')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'vault' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Visual Vault</button>
+        <button onClick={() => setActiveTab('directory')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'directory' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Link Directory</button>
+        <button onClick={() => setActiveTab('report')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'report' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Master Directory Report</button>
+        <button onClick={() => setActiveTab('sku')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'sku' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Part Number Matcher</button>
+      </div>
+
+      {/* 🚀 All tabs now share the exact same central data array */}
+      <div className={activeTab === 'vault' ? 'block' : 'hidden'}><ImageVault imagesWithDetails={imagesWithDetails} setRefresh={setRefresh} /></div>
+      <div className={activeTab === 'directory' ? 'block' : 'hidden'}><ImageLinksDirectory imagesWithDetails={imagesWithDetails} /></div>
+      <div className={activeTab === 'report' ? 'block' : 'hidden'}><ImageReportsTab imagesWithDetails={imagesWithDetails} /></div>
+      <div className={activeTab === 'sku' ? 'block' : 'hidden'}><ImagePartNumberTab imagesWithDetails={imagesWithDetails} /></div>
     </div>
   );
 }
@@ -3872,159 +4198,6 @@ function CatalogMonitor() {
           </div>
         </Card>
       )}
-    </div>
-  );
-}
-
-// ==========================================
-// 7.5 MODULE: IMAGE REPORTS TAB
-// ==========================================
-function ImageReportsTab() {
-  const imagesWithDetails = useB2FilesWithDetails('images/', 0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [brandFilter, setBrandFilter] = useState('All');
-  const [albumFilter, setAlbumFilter] = useState('All');
-  const [copied, setCopied] = useState(false);
-
-  const parsedData = useMemo(() => {
-    let motorUpCount = 0;
-    let fuelRiderCount = 0;
-    let oxGordCount = 0;
-
-    const items = imagesWithDetails.map(item => {
-      const fileName = item.name || '';
-      const sizeObj = (item as any).size || 0;
-      const timestamp = item.date || null;
-      
-      let brand = 'OxGord';
-      if (fileName.includes('[MUA]')) brand = 'MotorUp';
-      else if (fileName.includes('[FR]')) brand = 'FuelRider';
-
-      if (brand === 'MotorUp') motorUpCount++;
-      else if (brand === 'FuelRider') fuelRiderCount++;
-      else oxGordCount++;
-
-      let album = 'Uncategorized';
-      if (fileName.includes('/')) {
-        album = fileName.substring(0, fileName.lastIndexOf('/'));
-      }
-
-      let bucket = 'oxgord-media';
-      if (brand === 'MotorUp') bucket = 'motorup-media';
-      if (brand === 'FuelRider') bucket = 'fuelrider-media';
-      
-      const safeAlbum = album === 'Uncategorized' ? '' : encodeURIComponent(album) + '/';
-      const safeName = fileName.includes('/') ? fileName.substring(fileName.lastIndexOf('/') + 1) : fileName;
-      const url = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${safeAlbum}${encodeURIComponent(safeName)}`;
-
-      const dateStr = timestamp ? new Date(timestamp).toLocaleDateString() : '-';
-      const sizeMB = sizeObj > 0 ? (sizeObj / (1024 * 1024)).toFixed(2) + ' MB' : '-';
-
-      return { fileName, brand, album, sizeMB, rawSize: sizeObj, dateStr, url };
-    });
-
-    return { items, motorUpCount, fuelRiderCount, oxGordCount };
-  }, [imagesWithDetails]);
-
-  const filteredItems = useMemo(() => {
-    return parsedData.items.filter(item => {
-      const matchesSearch = item.fileName.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesBrand = brandFilter === 'All' || item.brand === brandFilter;
-      const matchesAlbum = albumFilter === 'All' || item.album === albumFilter;
-      return matchesSearch && matchesBrand && matchesAlbum;
-    });
-  }, [parsedData.items, searchQuery, brandFilter, albumFilter]);
-
-  const uniqueAlbums = useMemo(() => Array.from(new Set(parsedData.items.map(i => i.album))).sort(), [parsedData.items]);
-
-  const handleExportCSV = () => {
-    const csvContent = "File Name,Brand,Album,Size,Upload Date,Direct URL\n" + 
-      filteredItems.map(item => `"${item.fileName}","${item.brand}","${item.album}","${item.sizeMB}","${item.dateStr}","${item.url}"`).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Image_Vault_Report_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
-
-  const handleCopyUrls = () => {
-    navigator.clipboard.writeText(filteredItems.map(i => i.url).join('\n'));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">Total Library Assets</p><p className="text-2xl font-bold mt-1">{parsedData.items.length.toLocaleString()}</p></Card>
-        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">OxGord Media</p><p className="text-2xl font-bold mt-1 text-blue-600">{parsedData.oxGordCount.toLocaleString()}</p></Card>
-        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">MotorUp Media</p><p className="text-2xl font-bold mt-1 text-emerald-600">{parsedData.motorUpCount.toLocaleString()}</p></Card>
-        <Card className="p-4 bg-white"><p className="text-xs text-slate-500 font-medium">FuelRider Media</p><p className="text-2xl font-bold mt-1 text-amber-600">{parsedData.fuelRiderCount.toLocaleString()}</p></Card>
-      </div>
-
-      <Card className="p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
-          <div><h3 className="font-semibold text-slate-800">Master Directory Report</h3><p className="text-xs text-slate-500 font-medium">Showing {filteredItems.length} filtered files.</p></div>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Button onClick={handleCopyUrls} variant="secondary" className="bg-slate-100 whitespace-nowrap">{copied ? '✅ URLs Copied!' : '📋 Copy All URLs'}</Button>
-            <Button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-700 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> Export to Excel/CSV</Button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          <div><label className="block text-xs font-bold text-slate-700 uppercase mb-1">Search File Name</label><input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs outline-none" /></div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Brand Category</label>
-            <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white outline-none">
-              <option value="All">All Brands</option><option value="OxGord">OxGord</option><option value="MotorUp">MotorUp</option><option value="FuelRider">FuelRider</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Filter by Album</label>
-            <select value={albumFilter} onChange={e => setAlbumFilter(e.target.value)} className="w-full border border-slate-300 p-2 rounded text-xs bg-white outline-none">
-              <option value="All">All Albums</option>{uniqueAlbums.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto max-h-[600px] border border-slate-200 rounded-lg mt-4">
-          <table className="w-full text-xs text-left whitespace-nowrap">
-            <thead className="bg-slate-50 border-b sticky top-0 z-10"><tr className="text-slate-700 uppercase">{['File Name', 'Brand Category', 'Album', 'Size', 'Date'].map(k => <th key={k} className="p-3 font-bold">{k}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredItems.slice(0, 500).map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-3 font-medium text-slate-900 truncate max-w-[250px]" title={row.fileName}>{row.fileName}</td>
-                  <td className="p-3"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${row.brand === 'MotorUp' ? 'bg-emerald-100 text-emerald-800' : row.brand === 'FuelRider' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>{row.brand}</span></td>
-                  <td className="p-3 text-slate-600 truncate max-w-[200px]">{row.album}</td>
-                  <td className="p-3 text-slate-500">{row.sizeMB}</td><td className="p-3 text-slate-500">{row.dateStr}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredItems.length === 0 && <div className="text-center p-8 text-slate-400">No images match your filters.</div>}
-          {filteredItems.length > 500 && <div className="text-center text-xs text-slate-400 p-2 border-t bg-slate-50">Showing first 500 records. Use export to view all.</div>}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// ==========================================
-// 7.8 MODULE: IMAGE WORKSPACE WRAPPER
-// ==========================================
-function ImageWorkspace() {
-  const [activeTab, setActiveTab] = useState('vault');
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex border-b border-slate-200 overflow-x-auto">
-        <button onClick={() => setActiveTab('vault')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'vault' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Visual Vault</button>
-        <button onClick={() => setActiveTab('directory')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'directory' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Link Directory</button>
-        <button onClick={() => setActiveTab('report')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'report' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Master Directory Report</button>
-      </div>
-
-      <div className={activeTab === 'vault' ? 'block' : 'hidden'}><ImageVault /></div>
-      <div className={activeTab === 'directory' ? 'block' : 'hidden'}><ImageLinksDirectory /></div>
-      <div className={activeTab === 'report' ? 'block' : 'hidden'}><ImageReportsTab /></div>
     </div>
   );
 }
