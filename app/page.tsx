@@ -316,7 +316,16 @@ function Button({ children, onClick, variant = 'primary', className = '', disabl
 
 function useB2Files(folder: string, refreshTrigger: number) {
   const [files, setFiles] = useState<string[]>([]);
-  useEffect(() => { listFiles(folder).then(setFiles); }, [folder, refreshTrigger]);
+  useEffect(() => { 
+    // Fetch files with details, then sort by date descending (Newest first)
+    listFilesWithDetails(folder).then((res: any[]) => {
+      const sorted = res.sort((a, b) => b.date - a.date).map(f => f.name);
+      setFiles(sorted);
+    }).catch(() => {
+      // Fallback just in case
+      listFiles(folder).then(setFiles);
+    });
+  }, [folder, refreshTrigger]);
   return files;
 }
 
@@ -1802,6 +1811,161 @@ function ImagePartNumberTab({ imagesWithDetails }: { imagesWithDetails: any[] })
 }
 
 // ==========================================
+// 7.7 MODULE: IMAGE COMPARISON & DUPLICATES
+// ==========================================
+function ImageComparisonTab({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[], setRefresh: any }) {
+  const [duplicateMode, setDuplicateMode] = useState<'name' | 'size'>('name');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const duplicateClusters = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    
+    imagesWithDetails.forEach(item => {
+      const fullPath = item.name || '';
+      if (!fullPath) return;
+
+      const size = (item as any).size || (item as any).contentLength || 0;
+      const fileName = fullPath.includes('/') ? fullPath.substring(fullPath.lastIndexOf('/') + 1) : fullPath;
+      
+      let album = 'Uncategorized';
+      if (fullPath.includes('/')) album = fullPath.substring(0, fullPath.lastIndexOf('/'));
+      
+      let brand = 'OxGord';
+      if (fileName.includes('[MUA]')) brand = 'MotorUp';
+      else if (fileName.includes('[FR]')) brand = 'FuelRider';
+      
+      let bucket = 'oxgord-media';
+      if (brand === 'MotorUp') bucket = 'motorup-media';
+      if (brand === 'FuelRider') bucket = 'fuelrider-media';
+
+      const safeAlbum = album === 'Uncategorized' ? '' : encodeURIComponent(album) + '/';
+      const url = `https://${bucket}.s3.us-west-004.backblazeb2.com/images/${safeAlbum}${encodeURIComponent(fileName)}`;
+
+      const imgObj = { fullPath, fileName, album, brand, size, url, date: item.date };
+
+      let groupKey = '';
+      if (duplicateMode === 'name') {
+        // Find exact same names across different folders
+        groupKey = fileName.toLowerCase();
+      } else {
+        // Find exact same file sizes (strong indicator of identical files)
+        if (size === 0) return; 
+        groupKey = String(size);
+      }
+
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(imgObj);
+    });
+
+    // Return ONLY groups that have more than 1 image (actual duplicates)
+    return Object.entries(groups)
+      .filter(([_, items]) => items.length > 1)
+      .sort((a, b) => b[1].length - a[1].length); // Sort by highest amount of duplicates first
+  }, [imagesWithDetails, duplicateMode]);
+
+  const handleDeleteImage = async (imgName: string, targetAlbum: string) => {
+    if (!window.confirm(`Delete ${imgName} from ${targetAlbum}? This cannot be undone.`)) return;
+    
+    const uniqueKey = `${targetAlbum}/${imgName}`;
+    setIsDeleting(uniqueKey);
+    const folderPrefix = targetAlbum === 'Uncategorized' ? 'images/' : `images/${targetAlbum}/`;
+    
+    await deleteFileFromB2(imgName, folderPrefix);
+    setRefresh((r: number) => r + 1);
+    setIsDeleting(null);
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return 'Unknown Size';
+    return (bytes / 1024).toFixed(1) + ' KB';
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <Card className="p-6 space-y-4 bg-slate-50/50">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <h3 className="font-semibold text-slate-800 text-lg">Compare & Deduplicate</h3>
+            <p className="text-xs text-slate-500 font-medium mt-1">Found <strong className="text-red-500">{duplicateClusters.length}</strong> clusters of potential duplicate images.</p>
+          </div>
+          
+          <div className="flex bg-slate-200 p-1 rounded-lg w-full sm:w-auto">
+            <button 
+              onClick={() => setDuplicateMode('name')}
+              className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-md transition-colors ${duplicateMode === 'name' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Group by Exact Filename
+            </button>
+            <button 
+              onClick={() => setDuplicateMode('size')}
+              className={`flex-1 sm:flex-none px-4 py-2 text-xs font-bold rounded-md transition-colors ${duplicateMode === 'size' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Group by Identical Size
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6 max-h-[700px] overflow-y-auto pr-2">
+          {duplicateClusters.map(([groupKey, images]) => (
+            <div key={groupKey} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-slate-100 border-b border-slate-200 p-3 flex justify-between items-center">
+                <span className="font-bold text-slate-800 text-sm">
+                  {duplicateMode === 'name' ? `Filename: ${groupKey}` : `File Size: ${formatSize(Number(groupKey))}`}
+                </span>
+                <span className="bg-red-100 text-red-800 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                  {images.length} Duplicates
+                </span>
+              </div>
+              
+              <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {images.map((img: any, idx: number) => {
+                  const uniqueKey = `${img.album}/${img.fileName}`;
+                  const isItemDeleting = isDeleting === uniqueKey;
+                  
+                  return (
+                    <div key={idx} className={`border border-slate-200 rounded-lg overflow-hidden flex flex-col relative ${isItemDeleting ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <span className="absolute top-2 right-2 bg-slate-900/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded z-10 backdrop-blur-sm">
+                        {formatSize(img.size)}
+                      </span>
+                      <div className="h-32 bg-slate-50 flex items-center justify-center p-2">
+                        <img src={img.url} alt={img.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
+                      </div>
+                      <div className="p-3 border-t border-slate-100 space-y-2 flex-1 flex flex-col justify-between">
+                        <div>
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold mb-1 ${img.brand === 'MotorUp' ? 'bg-emerald-100 text-emerald-800' : img.brand === 'FuelRider' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {img.album}
+                          </span>
+                          <p className="text-[10px] font-medium text-slate-700 truncate" title={img.fileName}>{img.fileName}</p>
+                        </div>
+                        <Button 
+                          variant="danger" 
+                          onClick={() => handleDeleteImage(img.fileName, img.album)} 
+                          className="w-full text-[10px] py-1 mt-2"
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" /> {isItemDeleting ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {duplicateClusters.length === 0 && (
+            <div className="text-center p-12 flex flex-col items-center border border-dashed rounded-xl bg-emerald-50 border-emerald-200">
+              <CheckCircle2 className="w-12 h-12 text-emerald-500 mb-3" />
+              <p className="text-emerald-800 font-bold text-lg">Your vault is clean!</p>
+              <p className="text-emerald-600 text-sm mt-1">No duplicates were found using the current filter.</p>
+            </div>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ==========================================
 // 7.8 MODULE: IMAGE WORKSPACE WRAPPER
 // ==========================================
 function ImageWorkspace() {
@@ -1837,6 +2001,7 @@ function ImageWorkspace() {
         <button onClick={() => setActiveTab('directory')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'directory' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Link Directory</button>
         <button onClick={() => setActiveTab('report')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'report' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Master Directory Report</button>
         <button onClick={() => setActiveTab('sku')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'sku' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Part Number Matcher</button>
+        <button onClick={() => setActiveTab('compare')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'compare' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Compare & Deduplicate</button>
       </div>
 
       {/* 🚀 All tabs now share the exact same central data array */}
@@ -1844,6 +2009,7 @@ function ImageWorkspace() {
       <div className={activeTab === 'directory' ? 'block' : 'hidden'}><ImageLinksDirectory imagesWithDetails={imagesWithDetails} /></div>
       <div className={activeTab === 'report' ? 'block' : 'hidden'}><ImageReportsTab imagesWithDetails={imagesWithDetails} /></div>
       <div className={activeTab === 'sku' ? 'block' : 'hidden'}><ImagePartNumberTab imagesWithDetails={imagesWithDetails} /></div>
+      <div className={activeTab === 'compare' ? 'block' : 'hidden'}><ImageComparisonTab imagesWithDetails={imagesWithDetails} setRefresh={setRefresh} /></div>
     </div>
   );
 }
@@ -2259,8 +2425,8 @@ function MasterCatalog() {
   const [isEditLoaded, setIsEditLoaded] = useState(false);
 
   useEffect(() => {
-    if (snapshots.length > 0 && selectedCatFiles.length === 0) setSelectedCatFiles([snapshots[snapshots.length - 1]]);
-    if (adSnapshots.length > 0 && selectedAdFiles.length === 0) setSelectedAdFiles([adSnapshots[adSnapshots.length - 1]]);
+    if (snapshots.length > 0 && selectedCatFiles.length === 0) setSelectedCatFiles([snapshots[0]]);
+    if (adSnapshots.length > 0 && selectedAdFiles.length === 0) setSelectedAdFiles([adSnapshots[0]]);
   }, [snapshots.length, adSnapshots.length]);
 
   const loadViewerData = async () => {
@@ -2477,8 +2643,8 @@ function AsinDeepDive() {
 
   useEffect(() => {
     if (snapshots.length >= 2) {
-      if (!ddOld) setDdOld(snapshots[0]);
-      if (!ddNew) setDdNew(snapshots[snapshots.length - 1]);
+      if (!ddOld) setDdOld(snapshots[snapshots.length - 1]); // Oldest file
+      if (!ddNew) setDdNew(snapshots[0]); // Newest file
     }
   }, [snapshots.length]);
 
@@ -2567,8 +2733,8 @@ function GlobalDeltaView() {
 
   useEffect(() => {
     if (snapshots.length >= 2) {
-      if (!deltaOld) setDeltaOld(snapshots[0]);
-      if (!deltaNew) setDeltaNew(snapshots[snapshots.length - 1]);
+      if (!deltaOld) setDeltaOld(snapshots[snapshots.length - 1]); // Oldest file
+      if (!deltaNew) setDeltaNew(snapshots[0]); // Newest file
     }
   }, [snapshots.length]);
 
@@ -2812,7 +2978,7 @@ function AdsAnalysis() {
 
   useEffect(() => {
     if (adFiles.length > 0 && selectedAdFiles.length === 0) {
-      setSelectedAdFiles([adFiles[adFiles.length - 1]]);
+      setSelectedAdFiles([adFiles[0]]);
     }
   }, [adFiles.length]);
 
@@ -3519,8 +3685,8 @@ function SeoIntelligence() {
   const [rawAdRows, setRawAdRows] = useState<any[]>([]);
 
   useEffect(() => {
-    if (catSnapshots.length > 0 && !selectedCatFile) setSelectedCatFile(catSnapshots[catSnapshots.length - 1]);
-    if (adSnapshots.length > 0 && !selectedAdFile) setSelectedAdFile(adSnapshots[adSnapshots.length - 1]);
+    if (catSnapshots.length > 0 && !selectedCatFile) setSelectedCatFile(catSnapshots[0]);
+    if (adSnapshots.length > 0 && !selectedAdFile) setSelectedAdFile(adSnapshots[0]);
   }, [catSnapshots.length, adSnapshots.length]);
 
   useEffect(() => {
@@ -3848,8 +4014,8 @@ function CatalogMonitor() {
 
   useEffect(() => {
     if (snapshots.length >= 2) {
-      if (!cmOld) setCmOld(snapshots[0]);
-      if (!cmNew) setCmNew(snapshots[snapshots.length - 1]);
+      if (!cmOld) setCmOld(snapshots[snapshots.length - 1]); // Oldest file
+      if (!cmNew) setCmNew(snapshots[0]); // Newest file
     }
   }, [snapshots.length]);
 
