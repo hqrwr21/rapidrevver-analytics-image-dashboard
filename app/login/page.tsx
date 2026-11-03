@@ -2,8 +2,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Lock, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Lock, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { login } from '../actions/auth';
+import { BrandMark } from '../components/brand-mark';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -34,9 +35,7 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
         <div className="border-b border-slate-100 px-8 pb-6 pt-8">
-          <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-teal-500 text-white shadow-lg shadow-blue-600/25">
-            <LayoutDashboard className="h-6 w-6" aria-hidden="true" />
-          </div>
+          <BrandMark preload className="mb-5 h-16 w-16" sizes="64px" />
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Rapid Revver</h1>
           <p className="mt-1 text-sm text-slate-500">Analytics and Image Database</p>
         </div>
