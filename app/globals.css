@@ -1,26 +1,153 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3f5f9;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --accent: #2563eb;
+  --ring: #2563eb;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+}
+
+::selection {
+  background: #dbeafe;
+  color: #0f172a;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+  select,
+  textarea {
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.18);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: #2563eb;
+  }
+
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+.rr-shell {
+  background:
+    radial-gradient(1100px 420px at 100% -10%, rgb(37 99 235 / 0.07), transparent 55%),
+    radial-gradient(820px 380px at -8% -6%, rgb(13 148 136 / 0.06), transparent 50%),
+    var(--background);
+  font-variant-numeric: tabular-nums;
+}
+
+.rr-shell :where(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.rr-shell :where(th) {
+  font-weight: 600;
+  color: #334155;
+}
+
+.rr-shell :where(td, th) {
+  vertical-align: middle;
+}
+
+.rr-shell :where(tbody tr) {
+  transition: background-color 120ms ease;
+}
+
+.recharts-default-tooltip {
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.08) !important;
+}
+
+.recharts-legend-item-text,
+.recharts-cartesian-axis-tick-value {
+  fill: #64748b;
+  color: #64748b;
+}
+
+@keyframes rr-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-in {
+  animation: rr-enter 0.35s ease-out both;
+}
+
+@media (hover: none) {
+  .rr-shell .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+}
+
+.rr-shell ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.rr-shell ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.rr-shell ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-spin,
+  .animate-bounce,
+  .animate-pulse,
+  .animate-ping {
+    animation: none !important;
+  }
 }

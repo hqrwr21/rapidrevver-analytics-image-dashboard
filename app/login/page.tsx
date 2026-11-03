@@ -2,13 +2,14 @@
 "use client";
 
 import React, { useState } from 'react';
-import { LayoutDashboard, Lock, ArrowRight } from 'lucide-react';
+import { LayoutDashboard, Lock, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { login } from '../actions/auth';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,51 +28,64 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 font-sans">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        
-        <div className="bg-slate-900 p-8 text-center">
-          <div className="flex justify-center items-center space-x-2 mb-2">
-            <LayoutDashboard className="w-8 h-8 text-blue-400" />
-            <span className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
-              RapidRevver
-            </span>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f3f5f9] p-4 font-sans">
+      <div className="pointer-events-none absolute -left-24 top-[-10%] h-72 w-72 rounded-full bg-blue-200/70 blur-3xl" aria-hidden="true" />
+      <div className="pointer-events-none absolute -right-16 bottom-[-8%] h-80 w-80 rounded-full bg-teal-200/60 blur-3xl" aria-hidden="true" />
+
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+        <div className="border-b border-slate-100 px-8 pb-6 pt-8">
+          <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-teal-500 text-white shadow-lg shadow-blue-600/25">
+            <LayoutDashboard className="h-6 w-6" aria-hidden="true" />
           </div>
-          <p className="text-slate-400 text-sm">Login</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Rapid Revver</h1>
+          <p className="mt-1 text-sm text-slate-500">Analytics and Image Database</p>
         </div>
 
-        <form onSubmit={handleLogin} className="p-8 space-y-6">
+        <form onSubmit={handleLogin} className="space-y-5 px-8 py-7">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg text-center">
-              {error}
+            <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{error}</span>
             </div>
           )}
           
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Password</label>
+            <label htmlFor="password" className="text-sm font-medium text-slate-700">Password</label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock className="h-5 w-5 text-slate-400" />
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <Lock className="h-4 w-4 text-slate-400" aria-hidden="true" />
               </div>
               <input
-                type="password"
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="Enter password..."
+                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-11 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                placeholder="Enter password"
+                autoComplete="current-password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute inset-y-0 right-0 flex items-center rounded-r-xl px-3 text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-colors"
+            className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-600/25 transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Authenticating...' : (
               <>
-                Unlock Dashboard <ArrowRight className="ml-2 w-4 h-4" />
+                Unlock Dashboard <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
               </>
             )}
           </button>
