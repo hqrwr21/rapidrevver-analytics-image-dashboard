@@ -9,7 +9,7 @@ import {
   LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
   Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check,
-  List, ShoppingCart, Store, ShoppingBag, Eye, Copy
+  List, ShoppingCart, Store, ShoppingBag, Eye, Copy, Menu, LogOut
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -20,6 +20,7 @@ import {
   listFiles, deleteFileFromB2, getPresignedUploadUrl, 
   unlockBackblazeCors, renameImageInB2, renameAlbumInB2, listFilesWithDetails 
 } from './actions/b2';
+import { Button, Card, Dropzone, EmptyState, LoadingState, PageHeader, Tabs } from './components/ui';
 
 // ==========================================
 // RSC-SAFE DATA TRANSFER WRAPPERS
@@ -108,7 +109,7 @@ const parseCSVTable = (text: string): Record<string, string>[] => {
 const toCSV = (data: Record<string, any>[]): string => {
   if (data.length === 0) return '';
   const headers = Object.keys(data[0]);
-  let csv = headers.join(',') + '\n';
+  const csv = headers.join(',') + '\n';
   
   const rows = data.map(row => {
     return headers.map(h => {
@@ -283,7 +284,7 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
   });
 
   const coveragePct = Math.round((foundTokens.size / kwTokens.length) * 100 * 10) / 10;
-  let status = exactLocations.length > 0 ? "🟢 Exact Match" : coveragePct === 100 ? "🟡 Broad Match (All Words Present)" : coveragePct > 0 ? `🟠 Partial Match (${foundTokens.size}/${kwTokens.length} Words)` : "🔴 Missing (0% Coverage)";
+  const status = exactLocations.length > 0 ? "🟢 Exact Match" : coveragePct === 100 ? "🟡 Broad Match (All Words Present)" : coveragePct > 0 ? `🟠 Partial Match (${foundTokens.size}/${kwTokens.length} Words)` : "🔴 Missing (0% Coverage)";
 
   return {
     keyword: kwPhrase, status, exact_locations: exactLocations, exact_loc_str: exactLocations.length > 0 ? exactLocations.join(", ") : "None",
@@ -295,25 +296,6 @@ const evaluateKeywordCoverage = (kwPhrase: string, fieldsDict: Record<string, st
 // ==========================================
 // 4. BASE UI COMPONENTS & CUSTOM HOOKS
 // ==========================================
-function Card({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick?: () => void }) {
-  return (
-    <div onClick={onClick} className={`bg-white border border-slate-200 rounded-xl shadow-sm ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function Button({ children, onClick, variant = 'primary', className = '', disabled = false }: any) {
-  const baseStyle = "px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-sm";
-  const variants = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
-    secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200 focus:ring-slate-500",
-    outline: "border border-slate-300 text-slate-700 hover:bg-slate-50 focus:ring-slate-500",
-    danger: "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 focus:ring-red-500"
-  };
-  return <button onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant as keyof typeof variants]} ${className}`}>{children}</button>;
-}
-
 function useB2Files(folder: string, refreshTrigger: number) {
   const [files, setFiles] = useState<string[]>([]);
   useEffect(() => { 
@@ -422,19 +404,27 @@ function DataIngestion() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Data Ingestion Hub</h2>
-        <p className="text-slate-500 mt-1">Centralized upload center for your Catalog Snapshots and Advertising Reports.</p>
-      </div>
+      <PageHeader
+        title="Data Ingestion Hub"
+        description="Centralized upload center for your Catalog Snapshots and Advertising Reports."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6">
-          <div className="flex items-center space-x-2 mb-4"><Database className="w-5 h-5 text-blue-600"/><h3 className="text-lg font-semibold text-slate-800">Catalog & Listing Snapshots</h3></div>
-          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 cursor-pointer" onClick={() => catFileInputRef.current?.click()}>
-            <UploadCloud className="w-10 h-10 text-blue-500 mb-3" />
-            <p className="text-slate-700 font-medium">Upload Amazon Catalog CSVs</p>
-            <input type="file" ref={catFileInputRef} className="hidden" accept=".csv" multiple onChange={handleCatFileChange} />
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <Database className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h3 className="text-base font-semibold text-slate-800">Catalog & Listing Snapshots</h3>
           </div>
+          <Dropzone
+            onActivate={() => catFileInputRef.current?.click()}
+            icon={UploadCloud}
+            title="Upload Amazon Catalog CSVs"
+            hint="One or more .csv files"
+          >
+            <input type="file" ref={catFileInputRef} className="hidden" accept=".csv" multiple onChange={handleCatFileChange} />
+          </Dropzone>
 
           {catFiles.length > 0 && (
             <div className="mt-4 border border-slate-200 rounded-lg p-4">
@@ -455,12 +445,21 @@ function DataIngestion() {
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center space-x-2 mb-4"><TrendingUp className="w-5 h-5 text-emerald-600"/><h3 className="text-lg font-semibold text-slate-800">Advertising Reports</h3></div>
-          <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 cursor-pointer" onClick={() => adFileInputRef.current?.click()}>
-            <UploadCloud className="w-10 h-10 text-emerald-500 mb-3" />
-            <p className="text-slate-700 font-medium">Upload Amazon Search Term Reports</p>
-            <input type="file" ref={adFileInputRef} className="hidden" accept=".csv" multiple onChange={handleAdFileChange} />
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <TrendingUp className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h3 className="text-base font-semibold text-slate-800">Advertising Reports</h3>
           </div>
+          <Dropzone
+            onActivate={() => adFileInputRef.current?.click()}
+            icon={UploadCloud}
+            title="Upload Amazon Search Term Reports"
+            hint="One or more .csv files"
+            tone="emerald"
+          >
+            <input type="file" ref={adFileInputRef} className="hidden" accept=".csv" multiple onChange={handleAdFileChange} />
+          </Dropzone>
 
           {adFiles.length > 0 && (
             <div className="mt-4 border border-slate-200 rounded-lg p-4">
@@ -495,7 +494,7 @@ function DataIngestion() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-slate-400 italic">No snapshots stored.</p>}
+            ) : <EmptyState icon={FileText} title="No snapshots stored" className="py-8" />}
           </div>
 
           <div>
@@ -509,7 +508,7 @@ function DataIngestion() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-slate-400 italic">No ad reports stored.</p>}
+            ) : <EmptyState icon={TrendingUp} title="No ad reports stored" className="py-8" />}
           </div>
         </div>
       </Card>
@@ -1021,8 +1020,8 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                     <Card key={album} onClick={() => { if(editingAlbum !== album) { setActiveAlbum(album); setImageSearch(''); setSelectedImages([]); } }} className={`cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group relative flex flex-col overflow-hidden ${isDeletingAlbum ? 'opacity-50 pointer-events-none' : ''}`}>
                       {album !== 'Uncategorized' && (
                         <div className="absolute top-2 right-2 flex space-x-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }} className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full shadow-sm" title="Rename Album"><Edit3 className="w-4 h-4" /></button>
-                          <button onClick={(e) => handleDeleteAlbum(album, e)} className="p-1.5 bg-white/80 backdrop-blur-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full shadow-sm" title="Delete Album"><Trash2 className="w-4 h-4" /></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setEditingAlbum(album); setEditAlbumText(album); }} className="rounded-full bg-white/90 p-1.5 text-slate-500 shadow-sm backdrop-blur-sm hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" title="Rename Album" aria-label={`Rename ${album}`}><Edit3 className="w-4 h-4" /></button>
+                          <button type="button" onClick={(e) => handleDeleteAlbum(album, e)} className="rounded-full bg-white/90 p-1.5 text-slate-500 shadow-sm backdrop-blur-sm hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500" title="Delete Album" aria-label={`Delete ${album}`}><Trash2 className="w-4 h-4" /></button>
                         </div>
                       )}
                       <div className="h-36 bg-slate-100 flex items-center justify-center overflow-hidden border-b border-slate-100 relative">
@@ -1048,8 +1047,8 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                   );
                 })}
               </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No albums match "{albumSearch}".</div>
-          ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg">No albums yet. Create one above to get started.</div>}
+            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">{`No albums match "${albumSearch}".`}</div>
+          ) : <EmptyState icon={Folder} title="No albums yet" className="py-12">Create one above to get started.</EmptyState>}
         </Card>
 
         {albumSearch.trim() && (
@@ -1102,7 +1101,7 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                   );
                 })}
               </div>
-            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>}
+            ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">{`No images match the search "${imageSearch}".`}</div>}
           </Card>
         )}
       </div>
@@ -1134,7 +1133,7 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setLinkPrompt(null)}>
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-slate-200" onClick={e => e.stopPropagation()}>
             <h3 className="font-bold text-slate-800 text-lg mb-1">Copy Image Link</h3>
-            <p className="text-xs text-slate-50 mb-5 truncate font-medium" title={linkPrompt.name}>File: {linkPrompt.name}</p>
+            <p className="mb-5 truncate text-xs font-medium text-slate-500" title={linkPrompt.name}>File: {linkPrompt.name}</p>
             
             <div className="space-y-2.5">
               <button 
@@ -1169,7 +1168,7 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
       {expandedImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in" onClick={() => setExpandedImage(null)}>
           <div className="relative max-w-7xl max-h-screen p-2 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 bg-white rounded-full p-2 text-slate-800 shadow-xl hover:bg-slate-200 transition-colors z-[110]">
+            <button type="button" aria-label="Close image preview" onClick={() => setExpandedImage(null)} className="absolute -top-4 -right-4 z-[110] rounded-full bg-white p-2 text-slate-800 shadow-xl transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
               <X className="w-6 h-6" />
             </button>
             <img src={expandedImage} alt="Expanded View" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
@@ -1209,8 +1208,7 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                 ))}
               </div>
             </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-2">
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+            <div className="flex justify-end space-x-3 border-t border-slate-100 bg-slate-50 p-4">
               <Button variant="outline" onClick={() => setUploadedBatchLinks(null)}>Close</Button>
               <div className="flex items-center bg-white border border-slate-300 rounded-md overflow-hidden">
                 <span className="text-[10px] font-bold text-slate-500 px-2 py-1.5 bg-slate-50 border-r border-slate-300 uppercase tracking-wider hidden sm:inline-block">Copy Batch:</span>
@@ -1219,26 +1217,34 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                 <button onClick={() => { navigator.clipboard.writeText(uploadedBatchLinks.map(l => `${l.name}:\nL1: ${l.link1}\nL2: ${l.link2}\n`).join('\n')); setCopiedAll('BATCH_ALL'); setTimeout(() => setCopiedAll(false), 2000); }} className={`px-3 py-1.5 text-[10px] font-bold transition-colors ${copiedAll === 'BATCH_ALL' ? 'bg-emerald-500 text-white' : 'hover:bg-slate-100 text-slate-700'}`}>Both Links</button>
               </div>
             </div>
-            </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <button onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); setSelectedImages([]); }} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><ArrowLeft className="w-6 h-6 text-slate-600" /></button>
-          <div><h2 className="text-2xl font-bold text-slate-900">{activeAlbum}</h2><p className="text-slate-500 mt-1">Manage images in this album.</p></div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          
-          {currentImages.length > 0 && <Button variant="outline" onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)} disabled={isDownloading} className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}</Button>}
-          {activeAlbum !== 'Uncategorized' && <Button variant="danger" onClick={() => handleDeleteAlbum(activeAlbum)} disabled={isDeletingAlbum}><Trash2 className="w-4 h-4 mr-2" /> {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}</Button>}
-        </div>
-      </div>
+      <PageHeader
+        title={activeAlbum}
+        description="Manage images in this album."
+        leading={
+          <button
+            type="button"
+            aria-label="Back to albums"
+            onClick={() => { setActiveAlbum(null); setPendingFiles([]); setImageSearch(''); setSelectedImages([]); }}
+            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+        }
+        actions={
+          <>
+            {currentImages.length > 0 && <Button variant="outline" onClick={() => handleDownloadZip(currentImages.map(img => `${activeAlbum}/${img.name}`), `${activeAlbum}_Archive.zip`)} disabled={isDownloading} className="bg-white border-blue-200 text-blue-700 hover:bg-blue-50 whitespace-nowrap"><Download className="w-4 h-4 mr-2" /> {isDownloading ? 'Zipping...' : 'Download Entire Album'}</Button>}
+            {activeAlbum !== 'Uncategorized' && <Button variant="danger" onClick={() => handleDeleteAlbum(activeAlbum)} disabled={isDeletingAlbum}><Trash2 className="w-4 h-4 mr-2" /> {isDeletingAlbum ? 'Deleting...' : 'Delete Album'}</Button>}
+          </>
+        }
+      />
 
       <Card className="p-6">
         <h3 className="font-semibold text-slate-800 mb-4">Stage Files for Upload</h3>
-        <div className={`border-2 border-dashed border-slate-300 rounded-xl transition-colors ${uploading ? 'bg-slate-50' : 'hover:bg-slate-100 cursor-pointer'}`}>
+        <div className={`rounded-2xl border-2 border-dashed border-slate-300 transition-colors ${uploading ? 'bg-slate-50' : 'hover:border-blue-400 hover:bg-blue-50/40'}`}>
           {uploading ? (
             <div className="p-8 flex flex-col items-center justify-center min-h-[160px]">
               <UploadCloud className="w-10 h-10 mb-4 text-blue-600 animate-bounce" />
@@ -1249,7 +1255,23 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
               </div>
             </div>
           ) : (
-            <div className="p-8 flex flex-col items-center justify-center" onClick={() => fileInputRef.current?.click()}><UploadCloud className="w-10 h-10 text-blue-500 mb-3" /><p className="text-slate-700 font-medium">Click to select files</p><p className="text-xs text-slate-500 mt-1">Files will be queued below before uploading</p><input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/></div>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              className="flex cursor-pointer flex-col items-center justify-center p-8 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+            >
+              <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><UploadCloud className="h-6 w-6" aria-hidden="true" /></span>
+              <p className="font-medium text-slate-800">Click to select files</p>
+              <p className="mt-1 text-xs text-slate-500">Files will be queued below before uploading</p>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleQueueFiles}/>
+            </div>
           )}
         </div>
         {!uploading && pendingFiles.length > 0 && (
@@ -1329,7 +1351,7 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
                 );
               })}
             </div>
-          ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">No images match the search "{imageSearch}".</div>
+          ) : <div className="text-center p-8 text-slate-500 border border-dashed rounded-lg bg-slate-50">{`No images match the search "${imageSearch}".`}</div>
         ) : <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">Album is empty. Queue and upload files above.</div>}
       </Card>
     </div>
@@ -1702,7 +1724,7 @@ function ImagePartNumberTab({ imagesWithDetails }: { imagesWithDetails: any[] })
       
       // Handle long descriptive titles
       const nameTokens = cleanName.trim().split(/\s+/);
-      let partNumber = nameTokens[nameTokens.length - 1] || 'Unknown';
+      const partNumber = nameTokens[nameTokens.length - 1] || 'Unknown';
 
       if (!groups[partNumber]) groups[partNumber] = [];
       groups[partNumber].push({ fileName: safeName, album, brand, url1, url2 });
@@ -1802,7 +1824,7 @@ function ImagePartNumberTab({ imagesWithDetails }: { imagesWithDetails: any[] })
             )
           })}
           {filteredParts.length === 0 && (
-            <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-white">No part numbers match "{searchQuery}".</div>
+            <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-white">{`No part numbers match "${searchQuery}".`}</div>
           )}
         </div>
       </Card>
@@ -1977,32 +1999,35 @@ function ImageWorkspace() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">Image Management Hub</h2>
-            <p className="text-slate-500 mt-1">Organize, batch upload, audit, and export your entire media library.</p>
-          </div>
+      <PageHeader
+        title="Image Management Hub"
+        description="Organize, batch upload, audit, and export your entire media library."
+        actions={
           <Button 
             variant="outline" 
-            className="bg-amber-50 text-amber-700 border-amber-200 w-full sm:w-auto"
+            className="w-full border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 sm:w-auto"
             onClick={async () => {
               const res = await unlockBackblazeCors();
               alert(res.success ? "✅ CORS unlocked for all buckets!" : "❌ Error: " + res.error);
             }}
           >
-            <Unlock className="w-4 h-4 mr-2" /> Unlock Bucket Security
+            <Unlock className="mr-2 h-4 w-4" /> Unlock Bucket Security
           </Button>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="flex border-b border-slate-200 overflow-x-auto">
-        <button onClick={() => setActiveTab('vault')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'vault' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Visual Vault</button>
-        <button onClick={() => setActiveTab('directory')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'directory' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Link Directory</button>
-        <button onClick={() => setActiveTab('report')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'report' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Master Directory Report</button>
-        <button onClick={() => setActiveTab('sku')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'sku' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Part Number Matcher</button>
-        <button onClick={() => setActiveTab('compare')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'compare' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>Compare & Deduplicate</button>
-      </div>
+      <Tabs
+        label="Image management"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'vault', label: 'Visual Vault' },
+          { id: 'directory', label: 'Link Directory' },
+          { id: 'report', label: 'Master Directory Report' },
+          { id: 'sku', label: 'Part Number Matcher' },
+          { id: 'compare', label: 'Compare & Deduplicate' },
+        ]}
+      />
 
       {/* 🚀 All tabs now share the exact same central data array */}
       <div className={activeTab === 'vault' ? 'block' : 'hidden'}><ImageVault imagesWithDetails={imagesWithDetails} setRefresh={setRefresh} /></div>
@@ -2204,28 +2229,26 @@ function MasterlistWorkspace() {
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Data Extraction & Masterlists</h2>
-          <p className="text-slate-500 mt-1">Use the Global Tab to select specific rows and columns across your entire database.</p>
-        </div>
-        
-        {activeCategory !== 'global' && (
+      <PageHeader
+        title="Data Extraction & Masterlists"
+        description="Use the Global Tab to select specific rows and columns across your entire database."
+        actions={activeCategory !== 'global' ? (
           <>
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
             <Button onClick={() => fileInputRef.current?.click()} disabled={loading}>
-              <UploadCloud className="w-4 h-4 mr-2" /> Overwrite {activeCatObj.label}
+              <UploadCloud className="mr-2 h-4 w-4" /> Overwrite {activeCatObj.label}
             </Button>
           </>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div className="flex border-b border-slate-200 overflow-x-auto mt-2">
         {PRODUCT_CATEGORIES.map((cat: any) => (
           <button
             key={cat.id}
+            type="button"
             onClick={() => { setActiveCategory(cat.id); setSearchQuery(''); }}
-            className={`px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap flex items-center transition-colors ${
+            className={`flex items-center whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
               activeCategory === cat.id 
               ? (cat.id === 'global' ? 'border-purple-600 text-purple-700 font-bold bg-purple-50' : 'border-blue-600 text-blue-700 font-bold bg-blue-50/50') 
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -2321,10 +2344,7 @@ function MasterlistWorkspace() {
             )}
           </div>
         ) : filteredData.length === 0 ? (
-          <div className="text-center p-12 text-slate-500 border border-dashed rounded-lg bg-slate-50">
-            <List className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-            <p>No database loaded for {activeCatObj.label}.</p>
-          </div>
+          <EmptyState icon={List} title={`No database loaded for ${activeCatObj.label}.`} />
         ) : (
           <div className="overflow-x-auto max-h-[700px] border border-slate-200 rounded-lg shadow-sm">
             <table className="w-full text-sm text-left text-slate-600 whitespace-nowrap border-collapse">
@@ -2472,15 +2492,20 @@ function MasterCatalog() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Master Catalog Workspace</h2>
-        <p className="text-slate-500 mt-1">Browse, search, and manage your raw data files.</p>
-      </div>
+      <PageHeader
+        title="Master Catalog Workspace"
+        description="Browse, search, and manage your raw data files."
+      />
 
-      <div className="flex border-b border-slate-200">
-        <button onClick={() => setActiveTab('viewer')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'viewer' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Data Viewer</button>
-        <button onClick={() => setActiveTab('editor')} className={`px-4 py-2.5 text-sm font-medium border-b-2 ${activeTab === 'editor' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>Live Catalog Editor</button>
-      </div>
+      <Tabs
+        label="Catalog workspace"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'viewer', label: 'Data Viewer' },
+          { id: 'editor', label: 'Live Catalog Editor' },
+        ]}
+      />
 
       {activeTab === 'viewer' && (
         <Card className="p-6">
@@ -2672,10 +2697,10 @@ function AsinDeepDive() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">ASIN Deep Dive Comparison</h2>
-        <p className="text-slate-500 mt-1">Granular field-by-field inspection for a single product.</p>
-      </div>
+      <PageHeader
+        title="ASIN Deep Dive Comparison"
+        description="Granular field-by-field inspection for a single product."
+      />
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -2779,10 +2804,10 @@ function GlobalDeltaView() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Global Delta View</h2>
-        <p className="text-slate-500 mt-1">Side-by-side wide comparison of entire catalog snapshots.</p>
-      </div>
+      <PageHeader
+        title="Global Delta View"
+        description="Side-by-side wide comparison of entire catalog snapshots."
+      />
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -3166,7 +3191,7 @@ function AdsAnalysis() {
 
   // 🚀 Calculate robust Grand Totals for the table footer
   const consolidatedTotals = useMemo(() => {
-    let totals: Record<string, number> = {
+    const totals: Record<string, number> = {
       'Total': 0,
       'Spend': 0,
       'Impressions': 0,
@@ -3230,10 +3255,10 @@ function AdsAnalysis() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Amazon Advertising Analytics Hub</h2>
-        <p className="text-slate-500 mt-1">Configure your target filters below to interact with reports uploaded via the Data Ingestion Hub.</p>
-      </div>
+      <PageHeader
+        title="Amazon Advertising Analytics Hub"
+        description="Configure your target filters below to interact with reports uploaded via the Data Ingestion Hub."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card className="p-4 space-y-4 lg:col-span-1 border-slate-200">
@@ -3289,13 +3314,19 @@ function AdsAnalysis() {
         </Card>
 
         <div className="lg:col-span-3 space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-2 mb-4 gap-4">
-            <div className="flex overflow-x-auto w-full sm:w-auto space-x-2">
-              <button onClick={() => setActiveTab('consolidated')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'consolidated' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Consolidated Pivot</button>
-              <button onClick={() => setActiveTab('perf')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'perf' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Performance Overview</button>
-              <button onClick={() => setActiveTab('raw')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'raw' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Raw Data Vault</button>
-              <button onClick={() => setActiveTab('export')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'export' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Export Hub</button>
-            </div>
+          <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <Tabs
+              label="Advertising views"
+              className="w-full sm:w-auto"
+              active={activeTab}
+              onChange={setActiveTab}
+              tabs={[
+                { id: 'consolidated', label: 'Consolidated Pivot' },
+                { id: 'perf', label: 'Performance Overview' },
+                { id: 'raw', label: 'Raw Data Vault' },
+                { id: 'export', label: 'Export Hub' },
+              ]}
+            />
             
             {activeTab === 'perf' && (
               <div className="relative z-30">
@@ -3346,12 +3377,11 @@ function AdsAnalysis() {
           </div>
 
           {isDataLoading ? (
-            <Card className="p-12 text-center text-slate-500"><p className="animate-pulse">Loading big data from Backblaze B2...</p></Card>
+            <LoadingState label="Loading big data from Backblaze B2..." />
           ) : rawAdRows.length === 0 ? (
-            <Card className="p-12 text-center text-slate-500 border-dashed bg-slate-50">
-              <TrendingUp className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-              <p>Please select at least one Ad Report from the "Source Reports" panel to analyze.</p>
-            </Card>
+            <EmptyState icon={TrendingUp} title="No report selected">
+              Please select at least one Ad Report from the &quot;Source Reports&quot; panel to analyze.
+            </EmptyState>
           ) : (
             <>
               {activeTab === 'consolidated' && (
@@ -3781,10 +3811,10 @@ function SeoIntelligence() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">In-Depth Keyword & Catalog SEO Engine</h2>
-        <p className="text-slate-500 mt-1">Cross-reference top-performing ad terms against your catalog listings.</p>
-      </div>
+      <PageHeader
+        title="In-Depth Keyword & Catalog SEO Engine"
+        description="Cross-reference top-performing ad terms against your catalog listings."
+      />
 
       <Card className="p-6">
         <h3 className="font-semibold text-slate-800 mb-4">1. Configuration & Data Sources</h3>
@@ -3814,17 +3844,21 @@ function SeoIntelligence() {
         </div>
       </Card>
 
-      <div className="flex border-b border-slate-200 overflow-x-auto">
-        <button onClick={() => setActiveTab('audit')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'audit' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>ASIN Deep-Dive Audit</button>
-        <button onClick={() => setActiveTab('matrix')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'matrix' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Catalog-Wide Keyword Matrix</button>
-        <button onClick={() => setActiveTab('gap')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === 'gap' ? 'border-blue-600 text-blue-600 font-semibold' : 'border-transparent text-slate-500'}`}>Optimization Gap Action Plan</button>
-      </div>
+      <Tabs
+        label="SEO views"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: 'audit', label: 'ASIN Deep-Dive Audit' },
+          { id: 'matrix', label: 'Catalog-Wide Keyword Matrix' },
+          { id: 'gap', label: 'Optimization Gap Action Plan' },
+        ]}
+      />
 
       {(catalogData.length === 0 || topKwSummary.length === 0) ? (
-        <Card className="p-12 text-center text-slate-500 border-dashed">
-          <Search className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-          <p>Please select valid Advertising and Catalog snapshots above to launch the in-depth analyzer.</p>
-        </Card>
+        <EmptyState icon={Search} title="Sources needed">
+          Please select valid Advertising and Catalog snapshots above to launch the in-depth analyzer.
+        </EmptyState>
       ) : (
         <>
           {activeTab === 'audit' && (
@@ -3894,7 +3928,7 @@ function SeoIntelligence() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {auditResults.map((r, i) => {
-                        let bgStyle = r.status.includes("Exact") ? "bg-emerald-100 text-emerald-900 font-semibold" : r.status.includes("Broad") ? "bg-amber-100 text-amber-900" : r.status.includes("Partial") ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900 font-semibold";
+                        const bgStyle = r.status.includes("Exact") ? "bg-emerald-100 text-emerald-900 font-semibold" : r.status.includes("Broad") ? "bg-amber-100 text-amber-900" : r.status.includes("Partial") ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900 font-semibold";
                         return (
                           <tr key={i} className="hover:bg-slate-50">
                             <td className="p-2 font-medium text-slate-900">{r.keyword}</td><td className={`p-2 ${bgStyle}`}>{r.status}</td><td className="p-2">{r.exact_loc_str}</td><td className="p-2">{r.token_coverage_pct}%</td><td className="p-2 text-red-600">{r.missing_tokens_str}</td><td className="p-2">${r.Spend.toFixed(2)}</td><td className="p-2">${r.Sales.toFixed(2)}</td><td className="p-2">{r.ROAS.toFixed(2)}</td>
@@ -3925,7 +3959,7 @@ function SeoIntelligence() {
                           <td className="p-2 font-mono font-medium text-slate-900 border-r">{asin}</td><td className="p-2 truncate max-w-[250px] border-r">{fDict.Title}</td>
                           {topKwSummary.map(kw => {
                             const status = evaluateKeywordCoverage(kw.term, fDict).status;
-                            let bg = status.includes("Exact") ? "bg-emerald-100 text-emerald-900" : status.includes("Broad") ? "bg-amber-100 text-amber-900" : status.includes("Partial") ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900";
+                            const bg = status.includes("Exact") ? "bg-emerald-100 text-emerald-900" : status.includes("Broad") ? "bg-amber-100 text-amber-900" : status.includes("Partial") ? "bg-orange-100 text-orange-900" : "bg-red-100 text-red-900";
                             return <td key={kw.term} className={`p-2 text-center text-[10px] border-r ${bg}`}>{status.split(' ')[1] || 'Missing'}</td>;
                           })}
                         </tr>
@@ -3962,11 +3996,11 @@ function SeoIntelligence() {
 
               {(() => {
                 const gaps = auditResults.filter(r => r.status.includes("Missing") || r.status.includes("Partial"));
-                if (gaps.length === 0) return <div className="p-6 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg">ASIN '{selectedAuditAsin}' has 100% token coverage for all top ad terms!</div>;
+                if (gaps.length === 0) return <div className="p-6 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg">{`ASIN '${selectedAuditAsin}' has 100% token coverage for all top ad terms!`}</div>;
 
                 return (
                   <>
-                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg">Found {gaps.length} keyword optimization gaps for ASIN '{selectedAuditAsin}'.</div>
+                    <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg">{`Found ${gaps.length} keyword optimization gaps for ASIN '${selectedAuditAsin}'.`}</div>
                     <div className="overflow-x-auto max-h-[400px] border border-slate-200 rounded-lg">
                       <table className="w-full text-xs text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b text-slate-700">
@@ -4117,10 +4151,10 @@ function CatalogMonitor() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">Catalog Monitor & Alert Dashboard</h2>
-        <p className="text-slate-500 mt-1">Automatically detect unauthorized changes across all 124 catalog data points.</p>
-      </div>
+      <PageHeader
+        title="Catalog Monitor & Alert Dashboard"
+        description="Automatically detect unauthorized changes across all 124 catalog data points."
+      />
 
       <Card className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -4242,7 +4276,7 @@ function CatalogMonitor() {
                         <Pie data={filteredPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
                           {filteredPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(15,23,42,0.08)', fontSize: 12 }} />
                         <Legend verticalAlign="bottom" height={72} wrapperStyle={{ fontSize: '12px' }} />
                       </PieChart>
                     </ResponsiveContainer>
@@ -4348,16 +4382,16 @@ function CatalogMonitor() {
                     setVisibleColumns(new Set(Object.keys(colCounts)));
                     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-                  }} className="p-1.5 text-emerald-600 hover:bg-emerald-100 rounded" title="View Report Dashboard"><Eye className="w-4 h-4"/></button>
-                  <button onClick={async () => {
+                  }} className="rounded p-1.5 text-emerald-600 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" title="View Report Dashboard" aria-label={`View ${report}`}><Eye className="w-4 h-4"/></button>
+                  <button type="button" onClick={async () => {
                     const content = await safeGetFileContent(report, 'reports/');
                     downloadCSV(parseCSVTable(content), report);
-                  }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded" title="Download"><Download className="w-4 h-4"/></button>
-                  <button onClick={async () => {
+                  }} className="rounded p-1.5 text-blue-600 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" title="Download" aria-label={`Download ${report}`}><Download className="w-4 h-4"/></button>
+                  <button type="button" onClick={async () => {
                     if(!window.confirm(`Delete ${report}?`)) return;
                     await deleteFileFromB2(report, 'reports/');
                     setRefreshTrigger(r => r + 1);
-                  }} className="p-1.5 text-red-600 hover:bg-red-100 rounded" title="Delete"><Trash2 className="w-4 h-4"/></button>
+                  }} className="rounded p-1.5 text-red-600 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500" title="Delete" aria-label={`Delete ${report}`}><Trash2 className="w-4 h-4"/></button>
                 </div>
               </div>
             ))}
@@ -4373,6 +4407,7 @@ function CatalogMonitor() {
 // ==========================================
 export default function Page() {
   const [activeModule, setActiveModule] = useState('ingestion');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const navGroups = [
     {
@@ -4401,72 +4436,139 @@ export default function Page() {
     }
   ];
 
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mobileNavOpen]);
+
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/login';
+  };
+
+  const activeItem = navGroups.flatMap((group) => group.items).find((item) => item.id === activeModule);
+
+  const navigation = (onPick?: () => void) => (
+    <>
+      <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 text-white shadow-lg shadow-blue-950/40">
+          <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold tracking-tight text-white">Rapid Revver</p>
+          <p className="truncate text-xs text-slate-400">Analytics and Image Database</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Dashboard">
+        {navGroups.map((group) => (
+          <div key={group.title} className="mb-6">
+            <h3 className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {group.title}
+            </h3>
+            <ul className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeModule === item.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-current={isActive ? 'page' : undefined}
+                      onClick={() => {
+                        setActiveModule(item.id);
+                        onPick?.();
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-sm shadow-blue-950/40'
+                          : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+
+      <div className="space-y-3 border-t border-white/10 p-4">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 py-2 text-sm text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+        >
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          Log Out
+        </button>
+        <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+          <span className="truncate">CSV Engine Active</span>
+        </div>
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900">
-      
-      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col shadow-xl z-10">
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <LayoutDashboard className="w-6 h-6 text-blue-400" />
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">Rapid Revver</span>
-          </div>
-          <p className="text-slate-400 text-xs mt-1">Analytics and Image Database</p>
-        </div>
-
-        <nav className="flex-1 py-4 overflow-y-auto">
-          {navGroups.map((group, idx) => (
-            <div key={idx} className="mb-6 px-3">
-              <h3 className="px-3 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                {group.title}
-              </h3>
-              <ul className="space-y-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeModule === item.id;
-                  return (
-                    <li key={item.id}>
-                      <button onClick={() => setActiveModule(item.id)} className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                        <span>{item.label}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
-        
-        <div className="p-4 mt-auto">
-          <button 
-            onClick={async () => {
-              await logout();
-              window.location.href = '/login';
-            }} 
-            className="w-full flex justify-center items-center py-2 text-sm text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-800 hover:text-white transition-colors"
-          >
-            Log Out
-          </button>
-        </div>
-
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center space-x-2 text-xs text-slate-400 bg-slate-800 p-2 rounded-lg">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>CSV Engine Active</span>
-          </div>
-        </div>
+    <div className="rr-shell flex min-h-screen font-sans text-slate-900">
+      <aside className="z-10 hidden h-screen w-72 shrink-0 flex-col bg-slate-950 text-white shadow-xl md:flex">
+        {navigation()}
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="md:hidden bg-white border-b border-slate-200 p-4 flex justify-between items-center shadow-sm z-10">
-          <span className="text-xl font-bold text-slate-900">Rapid Revver</span>
-          <select value={activeModule} onChange={(e) => setActiveModule(e.target.value)} className="border-slate-300 p-2 border rounded-md text-sm">
-            {navGroups.flatMap(g => g.items).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-          </select>
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/60"
+            aria-label="Close navigation"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="relative flex h-full w-72 max-w-[85vw] flex-col bg-slate-950 text-white shadow-2xl">
+            {navigation(() => setMobileNavOpen(false))}
+          </aside>
+        </div>
+      )}
+
+      <main className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
+          <button
+            type="button"
+            aria-label="Open navigation"
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen(true)}
+            className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-900">Rapid Revver</p>
+            <p className="truncate text-xs text-slate-500">{activeItem?.label}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Log out"
+            onClick={handleLogout}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-[1400px] mx-auto">
+        <div className="flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-8">
+          <div className="mx-auto max-w-[1400px]">
             {activeModule === 'ingestion' && <DataIngestion />}
             
             {/* 🚀 Consolidated Image Workspace with tabs */}
