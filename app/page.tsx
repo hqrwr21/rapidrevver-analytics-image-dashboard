@@ -6,7 +6,7 @@ import JSZip from 'jszip';
 
 import { 
   UploadCloud, Database, Activity, TrendingUp, Search, 
-  LayoutDashboard, FileText, AlertCircle, BarChart3, FileSpreadsheet,
+  FileText, AlertCircle, BarChart3, FileSpreadsheet,
   CheckCircle2, Download, ChevronDown, ChevronUp, FileCode, Edit3, ZoomIn, Link,
   Folder, ArrowLeft, Trash2, Plus, Image as ImageIcon, X, Unlock, Check,
   List, ShoppingCart, Store, ShoppingBag, Eye, Copy, Menu, LogOut
@@ -21,6 +21,7 @@ import {
   unlockBackblazeCors, renameImageInB2, renameAlbumInB2, listFilesWithDetails 
 } from './actions/b2';
 import { Button, Card, Dropzone, EmptyState, LoadingState, PageHeader, Tabs } from './components/ui';
+import { BrandMark } from './components/brand-mark';
 
 // ==========================================
 // RSC-SAFE DATA TRANSFER WRAPPERS
@@ -4460,9 +4461,7 @@ export default function Page() {
   const navigation = (onPick?: () => void) => (
     <>
       <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 text-white shadow-lg shadow-blue-950/40">
-          <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
-        </div>
+        <BrandMark preload className="h-12 w-12" sizes="48px" />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-tight text-white">Rapid Revver</p>
           <p className="truncate text-xs text-slate-400">Analytics and Image Database</p>
@@ -4553,9 +4552,12 @@ export default function Page() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-900">Rapid Revver</p>
-            <p className="truncate text-xs text-slate-500">{activeItem?.label}</p>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <BrandMark className="h-9 w-9" sizes="36px" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">Rapid Revver</p>
+              <p className="truncate text-xs text-slate-500">{activeItem?.label}</p>
+            </div>
           </div>
           <button
             type="button"

@@ -20,6 +20,7 @@ export function middleware(request: NextRequest) {
 }
 
 // Ensure the middleware runs on all pages EXCEPT API routes and static files (images, css, etc.)
+// The public brand logo is excluded so next/image can read it without an auth cookie.
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|rapidrevver-logo\\.webp).*)'],
 };
