@@ -2,6 +2,7 @@
 
 import { logout } from './actions/auth';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import JSZip from 'jszip';
 
 import { 
@@ -933,8 +934,8 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
           </div>
         )}
 
-        {uploadedBatchLinks && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+        {uploadedBatchLinks && createPortal(
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-900/40 p-4 pt-4 backdrop-blur-sm sm:pt-6">
             <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
@@ -976,7 +977,8 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
               </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         <Card className="p-6">
@@ -1178,8 +1180,8 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
       )}
 
       {/* 🚀 BATCH UPLOAD COMPLETE MODAL */}
-      {uploadedBatchLinks && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+      {uploadedBatchLinks && createPortal(
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-900/40 p-4 pt-4 backdrop-blur-sm sm:pt-6">
           <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden border border-slate-200">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <div className="flex items-center space-x-2 text-emerald-600"><CheckCircle2 className="w-6 h-6" /><h3 className="font-bold text-lg text-slate-800">Batch Upload Complete ({uploadedBatchLinks.length} Images)</h3></div>
@@ -1219,8 +1221,9 @@ function ImageVault({ imagesWithDetails, setRefresh }: { imagesWithDetails: any[
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
 
       <PageHeader
         title={activeAlbum}
