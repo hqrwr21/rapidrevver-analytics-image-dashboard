@@ -22,6 +22,7 @@ import {
   unlockBackblazeCors, renameImageInB2, renameAlbumInB2, listFilesWithDetails 
 } from './actions/b2';
 import { Button, Card, Dropzone, EmptyState, LoadingState, PageHeader, Tabs } from './components/ui';
+import ImageBulkActions from './components/image-bulk-actions';
 import { BrandMark } from './components/brand-mark';
 
 // ==========================================
@@ -2030,6 +2031,7 @@ function ImageWorkspace() {
           { id: 'report', label: 'Master Directory Report' },
           { id: 'sku', label: 'Part Number Matcher' },
           { id: 'compare', label: 'Compare & Deduplicate' },
+          { id: 'bulk', label: 'Bulk Actions' },
         ]}
       />
 
@@ -2039,6 +2041,7 @@ function ImageWorkspace() {
       <div className={activeTab === 'report' ? 'block' : 'hidden'}><ImageReportsTab imagesWithDetails={imagesWithDetails} /></div>
       <div className={activeTab === 'sku' ? 'block' : 'hidden'}><ImagePartNumberTab imagesWithDetails={imagesWithDetails} /></div>
       <div className={activeTab === 'compare' ? 'block' : 'hidden'}><ImageComparisonTab imagesWithDetails={imagesWithDetails} setRefresh={setRefresh} /></div>
+      <div className={activeTab === 'bulk' ? 'block' : 'hidden'}><ImageBulkActions imagesWithDetails={imagesWithDetails} onChanged={() => setRefresh((value) => value + 1)} /></div>
     </div>
   );
 }
