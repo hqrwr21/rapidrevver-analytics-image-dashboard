@@ -8,9 +8,11 @@ import { deleteFileFromB2 } from "../actions/b2";
 import {
   dualLinks,
   indexCatalog,
+  linksExportCsv,
   parseBulkCsv,
   previewBulkRows,
   templateCsv,
+  type LinkExportRow,
   type BulkAction,
   type BulkMatch,
   type BulkPreviewRow,
@@ -74,7 +76,37 @@ function resultsCsv(lines: ResultLine[]): string {
       .map((value) => `"${String(value).replace(/"/g, '""')}"`)
       .join(","),
   );
-  return [header, ...body].join("\n");
+  return [header, ...body].join("\r\n");
+}
+
+function linkSheetFromRows(source: EditableRow[]): string | null {
+  const requested = source.filter((row) => row.action === "get_links");
+  if (requested.length === 0) return null;
+  const exportRows: LinkExportRow[] = requested.map((row) => ({
+    partNumber: row.partNumber,
+    brand: row.brandRaw.trim() || "All brands",
+    albumName: row.album.trim() || "All albums",
+    files: selectedMatches(row).map((match) => ({
+      fileName: match.fileName,
+      album: match.album,
+      url: dualLinks(match).link1,
+    })),
+  }));
+  return linksExportCsv(exportRows);
+}
+
+function downloadResults(lines: ResultLine[], linkSheet: string | null) {
+  const other = lines.filter((line) => line.action !== "get_links");
+  if (other.length === 0 && linkSheet) {
+    downloadText("image-bulk-results.csv", linkSheet);
+    return;
+  }
+  const status = `\uFEFF${resultsCsv(other.length > 0 ? other : lines)}`;
+  if (!linkSheet || other.length === 0) {
+    downloadText("image-bulk-results.csv", status);
+    return;
+  }
+  downloadText("image-bulk-results.csv", `${status}\r\n\r\n${linkSheet.replace(/^\uFEFF/, "")}`);
 }
 
 export default function ImageBulkActions({
@@ -93,6 +125,7 @@ export default function ImageBulkActions({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [links, setLinks] = useState<{ name: string; album: string; link1: string; link2: string }[] | null>(null);
+  const [linkSheet, setLinkSheet] = useState<string | null>(null);
 
   const catalog = useMemo(() => indexCatalog(imagesWithDetails || []), [imagesWithDetails]);
 
@@ -139,7 +172,7 @@ export default function ImageBulkActions({
     for (const row of rows) {
       const brand = row.brand || "";
       if (row.status === "invalid") {
-        report.push({ line: row.line, partNumber: row.partNumber, brand, albumName: row.album, action: row.actionRaw, file: "", matchedAlbum: "", matchedBrand: "", result: "failure", reason: row.errors.join("; ") });
+        report.push({ line: row.line, partNumber: row.partNumber, brand, albumName: row.album, action: row.action || row.actionRaw, file: "", matchedAlbum: "", matchedBrand: "", result: "failure", reason: row.errors.join("; ") });
         continue;
       }
       if (row.status === "not_found") {
@@ -191,7 +224,9 @@ export default function ImageBulkActions({
       link.remove();
       URL.revokeObjectURL(url);
     }
-    if (linkRows.length > 0) setLinks(linkRows);
+    const sheet = linkSheetFromRows(rows);
+    setLinkSheet(sheet);
+    if (linkRows.length > 0 || sheet) setLinks(linkRows);
     if (report.some((line) => line.action === "delete" && line.result === "success")) onChanged();
     setResults(report);
     setConfirmText("");
@@ -354,7 +389,7 @@ export default function ImageBulkActions({
                 {results.filter((line) => line.result === "success").length} succeeded, {results.filter((line) => line.result === "failure").length} failed, {results.filter((line) => line.result === "skipped").length} skipped.
               </p>
             </div>
-            <Button variant="outline" onClick={() => downloadText("image-bulk-results.csv", resultsCsv(results))}>
+            <Button variant="outline" onClick={() => downloadResults(results, linkSheet)}>
               <FileSpreadsheet className="mr-2 h-4 w-4" /> Download results CSV
             </Button>
           </div>
@@ -432,7 +467,7 @@ export default function ImageBulkActions({
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 p-4">
               <Button variant="outline" onClick={() => setLinks(null)}>Close</Button>
-              <Button variant="outline" onClick={() => downloadText("image-bulk-links.csv", ["file,album,link_1,link_2", ...links.map((item) => `"${item.name.replace(/"/g, '""')}","${item.album.replace(/"/g, '""')}","${item.link1}","${item.link2}"`)].join("\n"))}>
+              <Button variant="outline" onClick={() => { if (linkSheet) downloadText("image-bulk-links.csv", linkSheet); }}>
                 Export links CSV
               </Button>
             </div>

@@ -271,6 +271,69 @@ export function templateCsv(): string {
   ].join("\n");
 }
 
+export type LinkExportFile = {
+  fileName: string;
+  album: string;
+  url: string;
+};
+
+export type LinkExportRow = {
+  /** Part number exactly as it was typed in the uploaded CSV. */
+  partNumber: string;
+  brand: string;
+  albumName: string;
+  files: LinkExportFile[];
+};
+
+function csvCell(value: string): string {
+  if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+/** Bare file, then X1 / 1pc, then X4 / 4pcs. Alphabetical within each group. */
+export function matchSortRank(fileName: string): number {
+  const stem = fileName.replace(/\.[^.]+$/, "").replace(/[\s.\-_]+/g, "");
+  if (/x1$|1pc$/i.test(stem)) return 1;
+  if (/x4$|4pcs$/i.test(stem)) return 4;
+  return 0;
+}
+
+export function compareMatchedFiles(a: LinkExportFile, b: LinkExportFile): number {
+  const byRank = matchSortRank(a.fileName) - matchSortRank(b.fileName);
+  if (byRank !== 0) return byRank;
+  const byName = a.fileName.localeCompare(b.fileName, undefined, { sensitivity: "base" });
+  if (byName !== 0) return byName;
+  return a.album.localeCompare(b.album, undefined, { sensitivity: "base" });
+}
+
+/** Wide get_links sheet: one requested part per row, then one public URL per matched file. */
+export function linksExportCsv(rows: LinkExportRow[]): string {
+  const prepared = rows.map((row) => ({
+    ...row,
+    files: [...row.files].sort(compareMatchedFiles),
+  }));
+  const maxLinks = prepared.reduce((max, row) => Math.max(max, row.files.length), 0);
+  const headers = [
+    "part_number",
+    "brand",
+    "album_name",
+    "match_count",
+    ...Array.from({ length: maxLinks }, (_, index) => `link_${index + 1}`),
+  ];
+  const body = prepared.map((row) => {
+    const cells = [
+      row.partNumber,
+      row.brand,
+      row.albumName,
+      String(row.files.length),
+      ...row.files.map((file) => file.url),
+    ];
+    while (cells.length < headers.length) cells.push("");
+    return cells.map(csvCell).join(",");
+  });
+  return `\uFEFF${[headers.join(","), ...body].join("\r\n")}`;
+}
+
 export function dualLinks(image: Pick<IndexedImage, "album" | "fileName" | "bucket">): { link1: string; link2: string } {
   const safeAlbum = image.album === "Uncategorized" ? "" : `${encodeURIComponent(image.album)}/`;
   const objectPath = `images/${safeAlbum}${encodeURIComponent(image.fileName)}`;
