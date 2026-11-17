@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   corePartNumber,
+  dualLinks,
   indexCatalog,
+  linksExportCsv,
   normalizePartNumber,
   parseBulkCsv,
   previewBulkRows,
   type CatalogImage,
+  type LinkExportRow,
 } from "./image-bulk.ts";
 
 describe("normalizePartNumber", () => {
@@ -111,5 +114,44 @@ describe("previewBulkRows", () => {
     assert.equal(preview[3].matches.map((match) => match.fileName).sort().join(","), "FR GI127.jpg,GI127X1.jpg");
     assert.equal(preview[4].duplicate, true);
     assert.equal(preview[5].status, "not_found");
+  });
+});
+
+describe("linksExportCsv", () => {
+  it("puts each requested part on one row with links across, X1 before X4", () => {
+    const catalog = indexCatalog([
+      { name: "[FR] Hubcaps/44115SX4.jpg", bucket: "fuelrider-media" },
+      { name: "[FR] Hubcaps Before and After/44115S.jpg", bucket: "fuelrider-media" },
+      { name: "[FR] Hubcaps/44115SX1.jpg", bucket: "fuelrider-media" },
+      { name: "[FR] Grille Inserts/GI127X1.jpg", bucket: "fuelrider-media" },
+      { name: "[FR] Grille Inserts/FR GI127.jpg", bucket: "fuelrider-media" },
+    ]);
+    const parsed = parseBulkCsv([
+      "part_number,brand,action,album_name",
+      "44115-S,FuelRider,get links,",
+      "GI 127,,get_links,",
+      "\"GI,127\",OxGord,get_links,",
+    ].join("\n"));
+    const preview = previewBulkRows(parsed.rows, catalog);
+    const sheet: LinkExportRow[] = preview.map((row) => ({
+      partNumber: row.partNumber,
+      brand: row.brandRaw.trim() || "All brands",
+      albumName: row.album.trim() || "All albums",
+      files: row.matches.map((match) => ({
+        fileName: match.fileName,
+        album: match.album,
+        url: dualLinks(match).link1,
+      })),
+    }));
+    const csv = linksExportCsv(sheet);
+    assert.equal(csv.charCodeAt(0), 0xfeff);
+    const lines = csv.slice(1).split("\r\n");
+    assert.equal(lines[0], "part_number,brand,album_name,match_count,link_1,link_2,link_3");
+    assert.equal(lines[1].startsWith("44115-S,FuelRider,All albums,3,"), true);
+    assert.match(lines[1], /44115S\.jpg.*44115SX1\.jpg.*44115SX4\.jpg/);
+    assert.equal(lines[2].startsWith("GI 127,All brands,All albums,2,"), true);
+    assert.match(lines[2], /FR%20GI127\.jpg.*GI127X1\.jpg/);
+    assert.equal(lines[3], "\"GI,127\",OxGord,All albums,0,,,");
+    assert.equal(lines[1].includes("link2") || lines[1].includes("s3.us-west-004.backblazeb2.com/fuelrider-media/"), false);
   });
 });
